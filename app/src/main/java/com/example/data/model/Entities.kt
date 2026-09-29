@@ -97,3 +97,43 @@ data class AuditLogEntity(
     val details: String,
     val severity: String // "INFO", "WARNING", "SECURITY_ALERT"
 )
+
+@Entity(
+    tableName = "calendar_events",
+    indices = [
+        Index(value = ["eventDate"]),
+        Index(value = ["workerUsername"]),
+        Index(value = ["clientUsername"]),
+        Index(value = ["relatedTaskId"]),
+        Index(value = ["relatedRequestId"])
+    ]
+)
+data class CalendarEventEntity(
+    @PrimaryKey(autoGenerate = true)
+    val id: Long = 0,
+    val title: String,
+    val description: String = "",
+    val eventDate: String,                 // formaat: yyyy-MM-dd of dd-MM-yyyy
+    val startTime: String = "09:00",       // formaat: HH:mm
+    val endTime: String = "11:00",         // formaat: HH:mm
+    val startTimestampMillis: Long = System.currentTimeMillis(),
+    val endTimestampMillis: Long = System.currentTimeMillis() + 7200000L,
+    val location: String = "",
+    val latitude: Double = 0.0,
+    val longitude: Double = 0.0,
+    val workerUsername: String = "",
+    val workerName: String = "",
+    val clientUsername: String = "",
+    val clientName: String = "",
+    val relatedTaskId: Long? = null,
+    val relatedRequestId: Long? = null,
+    val googleSearchQuery: String = "",
+    val googleMapsUrl: String = "",
+    val syncStatus: String = "SYNCHRONIZED", // "SYNCHRONIZED", "PENDING_SYNC", "LOCAL_ONLY"
+    val isSyncedWithGoogleCalendar: Boolean = true,
+    val calendarColorHex: String = "#38BDF8", // Kleurcode voor weergave
+    val priority: String = "Normaal",       // "Normaal", "Hoog", "Urgent"
+    val reminderMinutes: Int = 30,
+    val createdAt: Long = System.currentTimeMillis(),
+    val updatedAt: Long = System.currentTimeMillis()
+)

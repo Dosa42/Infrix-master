@@ -99,3 +99,48 @@ interface AuditLogDao {
     @Query("DELETE FROM audit_logs")
     suspend fun clearLogs()
 }
+
+@Dao
+interface CalendarDao {
+    @Query("SELECT * FROM calendar_events ORDER BY startTimestampMillis ASC")
+    fun getAllEvents(): Flow<List<com.example.data.model.CalendarEventEntity>>
+
+    @Query("SELECT * FROM calendar_events WHERE eventDate = :date ORDER BY startTimestampMillis ASC")
+    fun getEventsForDate(date: String): Flow<List<com.example.data.model.CalendarEventEntity>>
+
+    @Query("SELECT * FROM calendar_events WHERE LOWER(workerUsername) = LOWER(:workerUsername) ORDER BY startTimestampMillis ASC")
+    fun getEventsForWorker(workerUsername: String): Flow<List<com.example.data.model.CalendarEventEntity>>
+
+    @Query("SELECT * FROM calendar_events WHERE LOWER(clientUsername) = LOWER(:clientUsername) ORDER BY startTimestampMillis ASC")
+    fun getEventsForClient(clientUsername: String): Flow<List<com.example.data.model.CalendarEventEntity>>
+
+    @Query("SELECT * FROM calendar_events WHERE id = :id LIMIT 1")
+    suspend fun getEventById(id: Long): com.example.data.model.CalendarEventEntity?
+
+    @Query("SELECT * FROM calendar_events WHERE relatedTaskId = :taskId LIMIT 1")
+    suspend fun getEventByTaskId(taskId: Long): com.example.data.model.CalendarEventEntity?
+
+    @Query("SELECT * FROM calendar_events WHERE relatedRequestId = :requestId LIMIT 1")
+    suspend fun getEventByRequestId(requestId: Long): com.example.data.model.CalendarEventEntity?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertEvent(event: com.example.data.model.CalendarEventEntity): Long
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertEvents(events: List<com.example.data.model.CalendarEventEntity>)
+
+    @Update
+    suspend fun updateEvent(event: com.example.data.model.CalendarEventEntity)
+
+    @Delete
+    suspend fun deleteEvent(event: com.example.data.model.CalendarEventEntity)
+
+    @Query("DELETE FROM calendar_events WHERE id = :id")
+    suspend fun deleteEventById(id: Long)
+
+    @Query("DELETE FROM calendar_events WHERE relatedTaskId = :taskId")
+    suspend fun deleteEventByTaskId(taskId: Long)
+
+    @Query("DELETE FROM calendar_events")
+    suspend fun clearAllEvents()
+}

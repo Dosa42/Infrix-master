@@ -21,12 +21,17 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.RadioButton
+import androidx.compose.material3.RadioButtonDefaults
 import androidx.compose.material3.ScrollableTabRow
 import androidx.compose.material3.Tab
+import androidx.compose.material3.TabRowDefaults
+import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -48,6 +53,21 @@ import com.example.data.model.PlanningTaskEntity
 import com.example.data.model.UserEntity
 import com.example.data.model.UserRole
 import com.example.data.model.WorkLogEntity
+import com.example.ui.theme.AdminPrimary
+import com.example.ui.theme.DarkAppBackground
+import com.example.ui.theme.DarkCardBorder
+import com.example.ui.theme.DarkCardSurface
+import com.example.ui.theme.DarkCardSurfaceVariant
+import com.example.ui.theme.KlantPrimary
+import com.example.ui.theme.PrimaryBlueGlow
+import com.example.ui.theme.StatusDanger
+import com.example.ui.theme.StatusInfo
+import com.example.ui.theme.StatusSuccess
+import com.example.ui.theme.StatusWarning
+import com.example.ui.theme.TextMuted
+import com.example.ui.theme.TextPrimary
+import com.example.ui.theme.TextSecondary
+import com.example.ui.theme.WerkerPrimary
 import com.example.ui.viewmodel.DashboardViewModel
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -62,6 +82,7 @@ fun AdminDashboardScreen(
     val allTasks by viewModel.allTasks.collectAsState()
     val allUsers by viewModel.allUsers.collectAsState()
     val allWorkLogs by viewModel.allWorkLogs.collectAsState()
+    val allCalendarEvents by viewModel.allCalendarEvents.collectAsState()
     val auditLogs by viewModel.auditLogs.collectAsState()
     val securityAlert by viewModel.securityAlert.collectAsState()
 
@@ -70,6 +91,7 @@ fun AdminDashboardScreen(
         "Accounts Beheer (${allUsers.size})",
         "Live Monitoring & Sessies",
         "Planning Beheer (${allTasks.size})",
+        "Backend Agenda (${allCalendarEvents.size})",
         "Backend Architectuur & Tools",
         "Audit Trail & Beveiliging"
     )
@@ -84,13 +106,13 @@ fun AdminDashboardScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color(0xFFF4F4F4))
+            .background(DarkAppBackground)
     ) {
         // Top Bar
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(Color(0xFF1E293B))
+                .background(Color(0xFF0F172A))
                 .padding(horizontal = 16.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
@@ -98,22 +120,23 @@ fun AdminDashboardScreen(
             Column {
                 Text(
                     text = "Admin Centraal Beheer",
-                    color = Color.White,
+                    color = TextPrimary,
                     fontWeight = FontWeight.Bold,
                     fontSize = 18.sp
                 )
                 Text(
                     text = "Beheerder: ${currentUser?.username ?: "Infrix-dev"} (Hoogste authority)",
-                    color = Color(0xFFAAAAAA),
+                    color = AdminPrimary,
+                    fontWeight = FontWeight.Medium,
                     fontSize = 12.sp
                 )
             }
             Button(
                 onClick = onLogout,
-                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFC0392B)),
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFDC2626)),
                 modifier = Modifier.testTag("admin_logout_button")
             ) {
-                Text("Uitloggen", fontSize = 12.sp)
+                Text("Uitloggen", fontSize = 12.sp, color = Color.White, fontWeight = FontWeight.Bold)
             }
         }
 
@@ -121,7 +144,7 @@ fun AdminDashboardScreen(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(Color(0xFFE2E8F0))
+                .background(DarkCardSurfaceVariant)
                 .padding(horizontal = 16.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -129,17 +152,35 @@ fun AdminDashboardScreen(
                 text = "Volledig Accountbeheer: Profielen, Rollen, Sessies/Lockouts, Rechten en Koppelingen",
                 fontSize = 12.sp,
                 fontWeight = FontWeight.SemiBold,
-                color = Color(0xFF1E293B)
+                color = TextSecondary
             )
         }
 
         // Tabs
-        ScrollableTabRow(selectedTabIndex = selectedTab, edgePadding = 8.dp) {
+        ScrollableTabRow(
+            selectedTabIndex = selectedTab,
+            edgePadding = 8.dp,
+            containerColor = Color(0xFF0F172A),
+            contentColor = TextPrimary,
+            indicator = { tabPositions ->
+                TabRowDefaults.SecondaryIndicator(
+                    Modifier.tabIndicatorOffset(tabPositions[selectedTab]),
+                    color = AdminPrimary
+                )
+            }
+        ) {
             tabs.forEachIndexed { index, title ->
                 Tab(
                     selected = selectedTab == index,
                     onClick = { selectedTab = index },
-                    text = { Text(title, fontSize = 12.sp, fontWeight = FontWeight.SemiBold) }
+                    text = {
+                        Text(
+                            text = title,
+                            fontSize = 12.sp,
+                            fontWeight = if (selectedTab == index) FontWeight.Bold else FontWeight.Medium,
+                            color = if (selectedTab == index) AdminPrimary else TextSecondary
+                        )
+                    }
                 )
             }
         }
@@ -174,10 +215,13 @@ fun AdminDashboardScreen(
                     onDeleteTask = { viewModel.deleteTask(it) },
                     onStatusChange = { taskId, status -> viewModel.updateTaskStatus(taskId, status) }
                 )
-                3 -> AdminBackendToolsTab(
+                3 -> AdminCalendarBackendTab(
                     viewModel = viewModel
                 )
-                4 -> AdminAuditTab(logs = auditLogs)
+                4 -> AdminBackendToolsTab(
+                    viewModel = viewModel
+                )
+                5 -> AdminAuditTab(logs = auditLogs)
             }
         }
     }
@@ -293,14 +337,15 @@ private fun AdminUsersComprehensiveTab(
             Text(
                 text = "Geregistreerde Accounts (${users.size})",
                 fontWeight = FontWeight.Bold,
-                fontSize = 15.sp
+                fontSize = 16.sp,
+                color = TextPrimary
             )
             Button(
                 onClick = onAddUserClick,
-                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2B5797)),
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2563EB)),
                 modifier = Modifier.testTag("admin_add_user_button")
             ) {
-                Text("+ Nieuw Account", fontSize = 12.sp)
+                Text("+ Nieuw Account", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color.White)
             }
         }
 
@@ -315,10 +360,11 @@ private fun AdminUsersComprehensiveTab(
 
                 Card(
                     modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(containerColor = Color.White),
+                    colors = CardDefaults.cardColors(containerColor = DarkCardSurface),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, DarkCardBorder),
                     elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
                 ) {
-                    Column(modifier = Modifier.padding(12.dp)) {
+                    Column(modifier = Modifier.padding(14.dp)) {
                         // Header Rij
                         Row(
                             modifier = Modifier.fillMaxWidth(),
@@ -330,7 +376,8 @@ private fun AdminUsersComprehensiveTab(
                                     Text(
                                         text = user.fullName,
                                         fontWeight = FontWeight.Bold,
-                                        fontSize = 15.sp
+                                        fontSize = 15.sp,
+                                        color = TextPrimary
                                     )
                                     Spacer(modifier = Modifier.width(6.dp))
                                     Text(
@@ -338,14 +385,14 @@ private fun AdminUsersComprehensiveTab(
                                         fontSize = 12.sp,
                                         fontWeight = FontWeight.Bold,
                                         color = when (user.role) {
-                                            UserRole.ADMIN -> Color(0xFF7C3AED)
-                                            UserRole.WERKER -> Color(0xFF0284C7)
-                                            UserRole.KLANT -> Color(0xFF0D9488)
+                                            UserRole.ADMIN -> AdminPrimary
+                                            UserRole.WERKER -> WerkerPrimary
+                                            UserRole.KLANT -> KlantPrimary
                                         }
                                     )
                                 }
                                 if (user.jobTitle.isNotBlank()) {
-                                    Text(text = user.jobTitle, fontSize = 12.sp, color = Color.Gray, fontWeight = FontWeight.Medium)
+                                    Text(text = user.jobTitle, fontSize = 12.sp, color = TextMuted, fontWeight = FontWeight.Medium)
                                 }
                             }
 
@@ -356,21 +403,21 @@ private fun AdminUsersComprehensiveTab(
                                         text = "Vergrendeld",
                                         fontSize = 11.sp,
                                         fontWeight = FontWeight.Bold,
-                                        color = Color.Red
+                                        color = StatusDanger
                                     )
                                 } else if (!user.isApproved) {
                                     Text(
                                         text = "Wacht Goedkeuring",
                                         fontSize = 11.sp,
                                         fontWeight = FontWeight.Bold,
-                                        color = Color(0xFFE67E22)
+                                        color = StatusWarning
                                     )
                                 } else {
                                     Text(
                                         text = if (user.isActive) "Actief" else "Gedeactiveerd",
                                         fontSize = 11.sp,
                                         fontWeight = FontWeight.Bold,
-                                        color = if (user.isActive) Color(0xFF27AE60) else Color.Red
+                                        color = if (user.isActive) StatusSuccess else StatusDanger
                                     )
                                 }
                             }
@@ -382,19 +429,19 @@ private fun AdminUsersComprehensiveTab(
                         Text(
                             text = "Gebruikersnaam: ${user.username} | E-mail: ${user.email} | Tel: ${user.phone.ifBlank { "-" }}",
                             fontSize = 12.sp,
-                            color = Color.DarkGray
+                            color = TextSecondary
                         )
                         Text(
                             text = "Afdeling/Bedrijf: ${user.departmentOrCompany.ifBlank { "-" }} | Tarief: €${user.hourlyRate}/u",
                             fontSize = 12.sp,
-                            color = Color.DarkGray
+                            color = TextSecondary
                         )
                         if (user.assignedClientOrPartner.isNotBlank()) {
                             Text(
                                 text = "Vaste koppeling met: ${user.assignedClientOrPartner}",
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.SemiBold,
-                                color = Color(0xFF0F4C81)
+                                color = WerkerPrimary
                             )
                         }
 
@@ -402,11 +449,11 @@ private fun AdminUsersComprehensiveTab(
                         Text(
                             text = "Rechten: Taken afronden [${if (user.canCompleteTasks) "JA" else "NEE"}] | Uren boeken [${if (user.canLogHours) "JA" else "NEE"}] | Aanvragen [${if (user.canSubmitRequests) "JA" else "NEE"}]",
                             fontSize = 11.sp,
-                            color = Color.Gray
+                            color = TextMuted
                         )
 
-                        Spacer(modifier = Modifier.height(8.dp))
-                        HorizontalDivider(color = Color(0xFFEEEEEE))
+                        Spacer(modifier = Modifier.height(10.dp))
+                        HorizontalDivider(color = DarkCardBorder)
                         Spacer(modifier = Modifier.height(8.dp))
 
                         // Actieknoppen Rij 1: Primaire mutaties
@@ -417,7 +464,7 @@ private fun AdminUsersComprehensiveTab(
                             OutlinedButton(
                                 onClick = { onEditProfile(user) },
                                 contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp, vertical = 2.dp)
-                            ) { Text("1. Bewerk Profiel", fontSize = 11.sp) }
+                            ) { Text("1. Bewerk Profiel", fontSize = 11.sp, color = TextPrimary) }
 
                             if (!isMainAdmin) {
                                 OutlinedButton(
@@ -429,23 +476,24 @@ private fun AdminUsersComprehensiveTab(
                                 ) {
                                     Text(
                                         if (user.role == UserRole.WERKER) "2. Rol -> Klant" else "2. Rol -> Werker",
-                                        fontSize = 11.sp
+                                        fontSize = 11.sp,
+                                        color = TextPrimary
                                     )
                                 }
 
                                 OutlinedButton(
                                     onClick = { onEditPermissions(user) },
                                     contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp, vertical = 2.dp)
-                                ) { Text("4. Rechten", fontSize = 11.sp) }
+                                ) { Text("4. Rechten", fontSize = 11.sp, color = TextPrimary) }
 
                                 OutlinedButton(
                                     onClick = { onAssignPartner(user) },
                                     contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp, vertical = 2.dp)
-                                ) { Text("5. Koppel", fontSize = 11.sp) }
+                                ) { Text("5. Koppel", fontSize = 11.sp, color = TextPrimary) }
                             }
                         }
 
-                        Spacer(modifier = Modifier.height(4.dp))
+                        Spacer(modifier = Modifier.height(6.dp))
 
                         // Actieknoppen Rij 2: Beveiliging, Goedkeuren & Status
                         Row(
@@ -457,9 +505,9 @@ private fun AdminUsersComprehensiveTab(
                                 if (!user.isApproved) {
                                     Button(
                                         onClick = { onApprove(user) },
-                                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF27AE60)),
+                                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF16A34A)),
                                         contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 6.dp, vertical = 2.dp)
-                                    ) { Text("Goedkeuren", fontSize = 11.sp) }
+                                    ) { Text("Goedkeuren", fontSize = 11.sp, color = Color.White) }
                                 }
 
                                 if (user.isLocked) {
@@ -467,33 +515,33 @@ private fun AdminUsersComprehensiveTab(
                                         onClick = { onUnlock(user) },
                                         colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFD97706)),
                                         contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 6.dp, vertical = 2.dp)
-                                    ) { Text("3. Ontgrendel", fontSize = 11.sp) }
+                                    ) { Text("3. Ontgrendel", fontSize = 11.sp, color = Color.White) }
                                 }
 
                                 if (!isMainAdmin) {
                                     OutlinedButton(
                                         onClick = { onToggleActive(user) },
                                         contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 6.dp, vertical = 2.dp)
-                                    ) { Text(if (user.isActive) "Deactiveer" else "Activeer", fontSize = 11.sp) }
+                                    ) { Text(if (user.isActive) "Deactiveer" else "Activeer", fontSize = 11.sp, color = TextPrimary) }
 
                                     OutlinedButton(
                                         onClick = { onForceLogout(user) },
                                         contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 6.dp, vertical = 2.dp)
-                                    ) { Text("3. Force Logout", fontSize = 11.sp) }
+                                    ) { Text("3. Force Logout", fontSize = 11.sp, color = TextPrimary) }
 
                                     OutlinedButton(
                                         onClick = { onResetPassword(user) },
                                         contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 6.dp, vertical = 2.dp)
-                                    ) { Text("Reset WW", fontSize = 11.sp) }
+                                    ) { Text("Reset WW", fontSize = 11.sp, color = TextPrimary) }
                                 }
                             }
 
                             if (!isMainAdmin) {
                                 Button(
                                     onClick = { onDeleteUser(user) },
-                                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFC0392B)),
+                                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFDC2626)),
                                     contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 6.dp, vertical = 2.dp)
-                                ) { Text("Wis", fontSize = 11.sp) }
+                                ) { Text("Wis", fontSize = 11.sp, color = Color.White) }
                             }
                         }
                     }
@@ -521,12 +569,13 @@ private fun AdminLiveMonitoringTab(
         Text(
             text = "Live Account & Sessie Monitoring",
             fontWeight = FontWeight.Bold,
-            fontSize = 16.sp
+            fontSize = 16.sp,
+            color = TextPrimary
         )
         Text(
             text = "Toezicht op actieve loginsessies, lockouts, en activiteitsbelasting",
             fontSize = 12.sp,
-            color = Color.Gray
+            color = TextMuted
         )
 
         Spacer(modifier = Modifier.height(12.dp))
@@ -538,37 +587,37 @@ private fun AdminLiveMonitoringTab(
         ) {
             Card(
                 modifier = Modifier.weight(1f),
-                colors = CardDefaults.cardColors(containerColor = Color.White),
-                elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+                colors = CardDefaults.cardColors(containerColor = DarkCardSurface),
+                border = androidx.compose.foundation.BorderStroke(1.dp, DarkCardBorder)
             ) {
-                Column(modifier = Modifier.padding(10.dp)) {
-                    Text("Actieve Sessies", fontSize = 12.sp, color = Color.Gray)
+                Column(modifier = Modifier.padding(12.dp)) {
+                    Text("Actieve Sessies", fontSize = 12.sp, color = TextMuted)
                     val activeSessions = users.count { it.sessionToken.isNotBlank() }
-                    Text("$activeSessions", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = Color(0xFF27AE60))
+                    Text("$activeSessions", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = StatusSuccess)
                 }
             }
 
             Card(
                 modifier = Modifier.weight(1f),
-                colors = CardDefaults.cardColors(containerColor = Color.White),
-                elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+                colors = CardDefaults.cardColors(containerColor = DarkCardSurface),
+                border = androidx.compose.foundation.BorderStroke(1.dp, DarkCardBorder)
             ) {
-                Column(modifier = Modifier.padding(10.dp)) {
-                    Text("Vergrendeld", fontSize = 12.sp, color = Color.Gray)
+                Column(modifier = Modifier.padding(12.dp)) {
+                    Text("Vergrendeld", fontSize = 12.sp, color = TextMuted)
                     val locked = users.count { it.isLocked }
-                    Text("$locked", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = if (locked > 0) Color.Red else Color.DarkGray)
+                    Text("$locked", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = if (locked > 0) StatusDanger else TextPrimary)
                 }
             }
 
             Card(
                 modifier = Modifier.weight(1f),
-                colors = CardDefaults.cardColors(containerColor = Color.White),
-                elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+                colors = CardDefaults.cardColors(containerColor = DarkCardSurface),
+                border = androidx.compose.foundation.BorderStroke(1.dp, DarkCardBorder)
             ) {
-                Column(modifier = Modifier.padding(10.dp)) {
-                    Text("Geboekt Totaal", fontSize = 12.sp, color = Color.Gray)
+                Column(modifier = Modifier.padding(12.dp)) {
+                    Text("Geboekt Totaal", fontSize = 12.sp, color = TextMuted)
                     val hours = workLogs.sumOf { it.hoursSpent }
-                    Text("${hours}u", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = Color(0xFF1E293B))
+                    Text("${hours}u", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = PrimaryBlueGlow)
                 }
             }
         }
@@ -578,7 +627,8 @@ private fun AdminLiveMonitoringTab(
         Text(
             text = "Overzicht per Account (Laatste inlog & Sessies):",
             fontWeight = FontWeight.Bold,
-            fontSize = 14.sp
+            fontSize = 14.sp,
+            color = TextPrimary
         )
         Spacer(modifier = Modifier.height(6.dp))
 
@@ -590,54 +640,54 @@ private fun AdminLiveMonitoringTab(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(vertical = 4.dp),
-                colors = CardDefaults.cardColors(containerColor = Color.White),
-                elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+                colors = CardDefaults.cardColors(containerColor = DarkCardSurface),
+                border = androidx.compose.foundation.BorderStroke(1.dp, DarkCardBorder)
             ) {
-                Column(modifier = Modifier.padding(10.dp)) {
+                Column(modifier = Modifier.padding(12.dp)) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text(text = "${u.fullName} (@${u.username})", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                        Text(text = "${u.fullName} (@${u.username})", fontWeight = FontWeight.Bold, fontSize = 14.sp, color = TextPrimary)
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(
                                 text = if (hasActiveSession) "Sessie Actief" else "Geen actieve sessie",
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.Bold,
-                                color = if (hasActiveSession) Color(0xFF27AE60) else Color.Gray
+                                color = if (hasActiveSession) StatusSuccess else TextMuted
                             )
                             if (u.isLocked) {
                                 Spacer(modifier = Modifier.width(6.dp))
-                                Text(text = "[LOCKOUT]", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color.Red)
+                                Text(text = "[LOCKOUT]", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = StatusDanger)
                             }
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(2.dp))
+                    Spacer(modifier = Modifier.height(4.dp))
                     Text(
                         text = "Laatste inlog: $lastLoginStr | Mislukte inlogpogingen: ${u.failedAttempts} | Rol: ${u.role.displayName}",
-                        fontSize = 11.sp,
-                        color = Color.DarkGray
+                        fontSize = 12.sp,
+                        color = TextSecondary
                     )
 
                     if (hasActiveSession && !u.username.equals("Infrix-dev", ignoreCase = true)) {
-                        Spacer(modifier = Modifier.height(4.dp))
+                        Spacer(modifier = Modifier.height(6.dp))
                         Row(horizontalArrangement = Arrangement.End, modifier = Modifier.fillMaxWidth()) {
                             OutlinedButton(
                                 onClick = { onForceLogout(u) },
                                 contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp, vertical = 2.dp)
-                            ) { Text("Force Logout Sessie", fontSize = 10.sp) }
+                            ) { Text("Force Logout Sessie", fontSize = 11.sp, color = TextPrimary) }
                         }
                     }
                     if (u.isLocked) {
-                        Spacer(modifier = Modifier.height(4.dp))
+                        Spacer(modifier = Modifier.height(6.dp))
                         Row(horizontalArrangement = Arrangement.End, modifier = Modifier.fillMaxWidth()) {
                             Button(
                                 onClick = { onUnlock(u) },
                                 colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFD97706)),
                                 contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp, vertical = 2.dp)
-                            ) { Text("Ontgrendel Account", fontSize = 10.sp) }
+                            ) { Text("Ontgrendel Account", fontSize = 11.sp, color = Color.White) }
                         }
                     }
                 }
@@ -646,11 +696,7 @@ private fun AdminLiveMonitoringTab(
     }
 }
 
-// -------------------------------------------------------------
-// MODALS VOOR DE 5 PIJLERS VAN COMPLEET ACCOUNTBEHEER
-// -------------------------------------------------------------
-
-// 1. Profiel & Gegevensbewerking Dialoog
+// Dialogen in Dark Theme
 @Composable
 private fun EditUserProfileDialog(
     user: UserEntity,
@@ -666,60 +712,25 @@ private fun EditUserProfileDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Profiel Bewerken: @${user.username}", fontWeight = FontWeight.Bold, fontSize = 16.sp) },
+        containerColor = DarkCardSurface,
+        title = { Text("Profiel Bewerken: @${user.username}", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = TextPrimary) },
         text = {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
                     .verticalScroll(rememberScrollState())
             ) {
-                OutlinedTextField(
-                    value = fullName,
-                    onValueChange = { fullName = it },
-                    label = { Text("Volledige Naam") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
+                DarkTextField(value = fullName, onValueChange = { fullName = it }, label = "Volledige Naam")
                 Spacer(modifier = Modifier.height(6.dp))
-                OutlinedTextField(
-                    value = email,
-                    onValueChange = { email = it },
-                    label = { Text("E-mailadres") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
+                DarkTextField(value = email, onValueChange = { email = it }, label = "E-mailadres")
                 Spacer(modifier = Modifier.height(6.dp))
-                OutlinedTextField(
-                    value = phone,
-                    onValueChange = { phone = it },
-                    label = { Text("Telefoonnummer") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
+                DarkTextField(value = phone, onValueChange = { phone = it }, label = "Telefoonnummer")
                 Spacer(modifier = Modifier.height(6.dp))
-                OutlinedTextField(
-                    value = dept,
-                    onValueChange = { dept = it },
-                    label = { Text("Afdeling of Bedrijfsnaam") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
+                DarkTextField(value = dept, onValueChange = { dept = it }, label = "Afdeling of Bedrijfsnaam")
                 Spacer(modifier = Modifier.height(6.dp))
-                OutlinedTextField(
-                    value = jobTitle,
-                    onValueChange = { jobTitle = it },
-                    label = { Text("Functietitel (bijv. Senior Monteur)") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
+                DarkTextField(value = jobTitle, onValueChange = { jobTitle = it }, label = "Functietitel (bijv. Senior Monteur)")
                 Spacer(modifier = Modifier.height(6.dp))
-                OutlinedTextField(
-                    value = hourlyRateStr,
-                    onValueChange = { hourlyRateStr = it },
-                    label = { Text("Uurtarief (€)") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
+                DarkTextField(value = hourlyRateStr, onValueChange = { hourlyRateStr = it }, label = "Uurtarief (€)")
             }
         },
         confirmButton = {
@@ -727,16 +738,16 @@ private fun EditUserProfileDialog(
                 onClick = {
                     val rate = hourlyRateStr.toDoubleOrNull() ?: user.hourlyRate
                     onConfirm(fullName, email, phone, dept, jobTitle, rate)
-                }
-            ) { Text("Opslaan") }
+                },
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2563EB))
+            ) { Text("Opslaan", color = Color.White) }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Annuleren") }
+            TextButton(onClick = onDismiss) { Text("Annuleren", color = TextSecondary) }
         }
     )
 }
 
-// 4. Granulaire Rechten Dialoog
 @Composable
 private fun EditUserPermissionsDialog(
     user: UserEntity,
@@ -749,36 +760,38 @@ private fun EditUserPermissionsDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Rechten Configureren: @${user.username}", fontWeight = FontWeight.Bold, fontSize = 15.sp) },
+        containerColor = DarkCardSurface,
+        title = { Text("Rechten Configureren: @${user.username}", fontWeight = FontWeight.Bold, fontSize = 15.sp, color = TextPrimary) },
         text = {
             Column(modifier = Modifier.fillMaxWidth()) {
-                Text("Stel specifieke bevoegdheden in voor dit account:", fontSize = 13.sp, color = Color.DarkGray)
+                Text("Stel specifieke bevoegdheden in voor dit account:", fontSize = 13.sp, color = TextSecondary)
                 Spacer(modifier = Modifier.height(10.dp))
 
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Checkbox(checked = canComplete, onCheckedChange = { canComplete = it })
-                    Text("Mag taken definitief afronden", fontSize = 13.sp)
+                    Checkbox(checked = canComplete, onCheckedChange = { canComplete = it }, colors = CheckboxDefaults.colors(checkedColor = AdminPrimary))
+                    Text("Mag taken definitief afronden", fontSize = 13.sp, color = TextPrimary)
                 }
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Checkbox(checked = canLogHours, onCheckedChange = { canLogHours = it })
-                    Text("Mag werkuren boeken en registreren", fontSize = 13.sp)
+                    Checkbox(checked = canLogHours, onCheckedChange = { canLogHours = it }, colors = CheckboxDefaults.colors(checkedColor = AdminPrimary))
+                    Text("Mag werkuren boeken en registreren", fontSize = 13.sp, color = TextPrimary)
                 }
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Checkbox(checked = canSubmitRequests, onCheckedChange = { canSubmitRequests = it })
-                    Text("Mag service-aanvragen indienen", fontSize = 13.sp)
+                    Checkbox(checked = canSubmitRequests, onCheckedChange = { canSubmitRequests = it }, colors = CheckboxDefaults.colors(checkedColor = AdminPrimary))
+                    Text("Mag service-aanvragen indienen", fontSize = 13.sp, color = TextPrimary)
                 }
             }
         },
         confirmButton = {
-            Button(onClick = { onConfirm(canComplete, canLogHours, canSubmitRequests) }) { Text("Toepassen") }
+            Button(onClick = { onConfirm(canComplete, canLogHours, canSubmitRequests) }, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2563EB))) {
+                Text("Toepassen", color = Color.White)
+            }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Annuleren") }
+            TextButton(onClick = onDismiss) { Text("Annuleren", color = TextSecondary) }
         }
     )
 }
 
-// 5. Koppeling Dialoog
 @Composable
 private fun AssignPartnerDialog(
     user: UserEntity,
@@ -791,14 +804,15 @@ private fun AssignPartnerDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Vaste Koppeling voor @${user.username}", fontWeight = FontWeight.Bold, fontSize = 15.sp) },
+        containerColor = DarkCardSurface,
+        title = { Text("Vaste Koppeling voor @${user.username}", fontWeight = FontWeight.Bold, fontSize = 15.sp, color = TextPrimary) },
         text = {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
                     .verticalScroll(rememberScrollState())
             ) {
-                Text("Koppel deze ${user.role.displayName} aan een vaste klant of contactpersoon:", fontSize = 13.sp, color = Color.DarkGray)
+                Text("Koppel deze ${user.role.displayName} aan een vaste klant of contactpersoon:", fontSize = 13.sp, color = TextSecondary)
                 Spacer(modifier = Modifier.height(8.dp))
 
                 candidates.forEach { c ->
@@ -810,23 +824,25 @@ private fun AssignPartnerDialog(
                     ) {
                         RadioButton(
                             selected = selectedPartner == c.username,
-                            onClick = { selectedPartner = c.username }
+                            onClick = { selectedPartner = c.username },
+                            colors = RadioButtonDefaults.colors(selectedColor = WerkerPrimary, unselectedColor = TextMuted)
                         )
-                        Text("${c.fullName} (@${c.username} - ${c.role.displayName})", fontSize = 13.sp)
+                        Text("${c.fullName} (@${c.username} - ${c.role.displayName})", fontSize = 13.sp, color = TextPrimary)
                     }
                 }
             }
         },
         confirmButton = {
-            Button(onClick = { onConfirm(selectedPartner) }) { Text("Koppeling Opslaan") }
+            Button(onClick = { onConfirm(selectedPartner) }, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2563EB))) {
+                Text("Koppeling Opslaan", color = Color.White)
+            }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Annuleren") }
+            TextButton(onClick = onDismiss) { Text("Annuleren", color = TextSecondary) }
         }
     )
 }
 
-// Volledig Account Aanmaken Dialoog
 @Composable
 private fun CreateFullAccountDialog(
     allUsers: List<UserEntity>,
@@ -847,96 +863,54 @@ private fun CreateFullAccountDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Nieuw Account Registreren", fontWeight = FontWeight.Bold, fontSize = 16.sp) },
+        containerColor = DarkCardSurface,
+        title = { Text("Nieuw Account Registreren", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = TextPrimary) },
         text = {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
                     .verticalScroll(rememberScrollState())
             ) {
-                Text("Kies Rol:", fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                Text("Kies Rol:", fontWeight = FontWeight.SemiBold, fontSize = 13.sp, color = TextPrimary)
                 Row {
                     listOf(UserRole.WERKER, UserRole.KLANT).forEach { r ->
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             RadioButton(
                                 selected = selectedRole == r,
-                                onClick = { selectedRole = r }
+                                onClick = { selectedRole = r },
+                                colors = RadioButtonDefaults.colors(selectedColor = if (r == UserRole.WERKER) WerkerPrimary else KlantPrimary, unselectedColor = TextMuted)
                             )
-                            Text(r.displayName, fontSize = 13.sp)
+                            Text(r.displayName, fontSize = 13.sp, color = TextPrimary)
                             Spacer(modifier = Modifier.width(8.dp))
                         }
                     }
                 }
 
                 Spacer(modifier = Modifier.height(6.dp))
-                OutlinedTextField(
-                    value = username,
-                    onValueChange = { username = it },
-                    label = { Text("Gebruikersnaam") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
+                DarkTextField(value = username, onValueChange = { username = it }, label = "Gebruikersnaam")
                 Spacer(modifier = Modifier.height(6.dp))
-                OutlinedTextField(
-                    value = password,
-                    onValueChange = { password = it },
-                    label = { Text("Passwoord") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
+                DarkTextField(value = password, onValueChange = { password = it }, label = "Passwoord")
                 Spacer(modifier = Modifier.height(6.dp))
-                OutlinedTextField(
-                    value = fullName,
-                    onValueChange = { fullName = it },
-                    label = { Text("Volledige Naam") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
+                DarkTextField(value = fullName, onValueChange = { fullName = it }, label = "Volledige Naam")
                 Spacer(modifier = Modifier.height(6.dp))
-                OutlinedTextField(
-                    value = email,
-                    onValueChange = { email = it },
-                    label = { Text("E-mailadres") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
+                DarkTextField(value = email, onValueChange = { email = it }, label = "E-mailadres")
                 Spacer(modifier = Modifier.height(6.dp))
-                OutlinedTextField(
-                    value = phone,
-                    onValueChange = { phone = it },
-                    label = { Text("Telefoonnummer") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
+                DarkTextField(value = phone, onValueChange = { phone = it }, label = "Telefoonnummer")
                 Spacer(modifier = Modifier.height(6.dp))
-                OutlinedTextField(
-                    value = dept,
-                    onValueChange = { dept = it },
-                    label = { Text(if (selectedRole == UserRole.WERKER) "Afdeling" else "Bedrijfsnaam") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
+                DarkTextField(value = dept, onValueChange = { dept = it }, label = if (selectedRole == UserRole.WERKER) "Afdeling" else "Bedrijfsnaam")
                 Spacer(modifier = Modifier.height(6.dp))
-                OutlinedTextField(
-                    value = jobTitle,
-                    onValueChange = { jobTitle = it },
-                    label = { Text("Functietitel") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
+                DarkTextField(value = jobTitle, onValueChange = { jobTitle = it }, label = "Functietitel")
                 Spacer(modifier = Modifier.height(6.dp))
-                OutlinedTextField(
-                    value = hourlyRateStr,
-                    onValueChange = { hourlyRateStr = it },
-                    label = { Text("Uurtarief (€)") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
+                DarkTextField(value = hourlyRateStr, onValueChange = { hourlyRateStr = it }, label = "Uurtarief (€)")
 
                 Spacer(modifier = Modifier.height(8.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    RadioButton(selected = autoApprove, onClick = { autoApprove = !autoApprove })
-                    Text("Direct goedkeuren voor inloggen", fontSize = 12.sp)
+                    RadioButton(
+                        selected = autoApprove,
+                        onClick = { autoApprove = !autoApprove },
+                        colors = RadioButtonDefaults.colors(selectedColor = StatusSuccess, unselectedColor = TextMuted)
+                    )
+                    Text("Direct goedkeuren voor inloggen", fontSize = 12.sp, color = TextPrimary)
                 }
             }
         },
@@ -959,11 +933,12 @@ private fun CreateFullAccountDialog(
                             autoApprove
                         )
                     }
-                }
-            ) { Text("Creëren") }
+                },
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2563EB))
+            ) { Text("Creëren", color = Color.White) }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Annuleren") }
+            TextButton(onClick = onDismiss) { Text("Annuleren", color = TextSecondary) }
         }
     )
 }
@@ -978,18 +953,13 @@ private fun ResetPasswordDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Wachtwoord Resetten voor ${targetUser.username}", fontWeight = FontWeight.Bold, fontSize = 15.sp) },
+        containerColor = DarkCardSurface,
+        title = { Text("Wachtwoord Resetten voor ${targetUser.username}", fontWeight = FontWeight.Bold, fontSize = 15.sp, color = TextPrimary) },
         text = {
             Column(modifier = Modifier.fillMaxWidth()) {
-                Text("Voer het nieuwe wachtwoord in voor dit account:", fontSize = 13.sp, color = Color.DarkGray)
+                Text("Voer het nieuwe wachtwoord in voor dit account:", fontSize = 13.sp, color = TextSecondary)
                 Spacer(modifier = Modifier.height(8.dp))
-                OutlinedTextField(
-                    value = newPassword,
-                    onValueChange = { newPassword = it },
-                    label = { Text("Nieuw Wachtwoord") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
+                DarkTextField(value = newPassword, onValueChange = { newPassword = it }, label = "Nieuw Wachtwoord")
             }
         },
         confirmButton = {
@@ -998,11 +968,12 @@ private fun ResetPasswordDialog(
                     if (newPassword.isNotBlank()) {
                         onConfirm(newPassword.trim())
                     }
-                }
-            ) { Text("Opslaan") }
+                },
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2563EB))
+            ) { Text("Opslaan", color = Color.White) }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Annuleren") }
+            TextButton(onClick = onDismiss) { Text("Annuleren", color = TextSecondary) }
         }
     )
 }
@@ -1023,14 +994,15 @@ private fun AdminPlanningTab(
             Text(
                 text = "Alle Planningstaken (${tasks.size})",
                 fontWeight = FontWeight.Bold,
-                fontSize = 15.sp
+                fontSize = 16.sp,
+                color = TextPrimary
             )
             Button(
                 onClick = onAddTaskClick,
-                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2B5797)),
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2563EB)),
                 modifier = Modifier.testTag("admin_add_task_button")
             ) {
-                Text("+ Nieuwe Taak Inplannen", fontSize = 12.sp)
+                Text("+ Nieuwe Taak Inplannen", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color.White)
             }
         }
 
@@ -1038,7 +1010,7 @@ private fun AdminPlanningTab(
 
         if (tasks.isEmpty()) {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text("Geen taken gevonden in de planning.", color = Color.Gray)
+                Text("Geen taken gevonden in de planning.", color = TextMuted)
             }
         } else {
             LazyColumn(
@@ -1048,10 +1020,11 @@ private fun AdminPlanningTab(
                 items(tasks, key = { it.id }) { task ->
                     Card(
                         modifier = Modifier.fillMaxWidth(),
-                        colors = CardDefaults.cardColors(containerColor = Color.White),
-                        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+                        colors = CardDefaults.cardColors(containerColor = DarkCardSurface),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, DarkCardBorder),
+                        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
                     ) {
-                        Column(modifier = Modifier.padding(12.dp)) {
+                        Column(modifier = Modifier.padding(14.dp)) {
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.SpaceBetween
@@ -1060,6 +1033,7 @@ private fun AdminPlanningTab(
                                     text = task.title,
                                     fontWeight = FontWeight.Bold,
                                     fontSize = 15.sp,
+                                    color = TextPrimary,
                                     modifier = Modifier.weight(1f)
                                 )
                                 Text(
@@ -1067,31 +1041,31 @@ private fun AdminPlanningTab(
                                     fontWeight = FontWeight.Bold,
                                     fontSize = 12.sp,
                                     color = when (task.status) {
-                                        "In uitvoering" -> Color(0xFF2980B9)
-                                        "Afgerond" -> Color(0xFF27AE60)
-                                        else -> Color(0xFFE67E22)
+                                        "In uitvoering" -> StatusInfo
+                                        "Afgerond" -> StatusSuccess
+                                        else -> StatusWarning
                                     }
                                 )
                             }
 
                             Spacer(modifier = Modifier.height(4.dp))
-                            Text(text = task.description, fontSize = 13.sp, color = Color.DarkGray)
+                            Text(text = task.description, fontSize = 13.sp, color = TextSecondary)
                             Spacer(modifier = Modifier.height(6.dp))
 
                             Text(
                                 text = "Werker: ${task.assignedWorkerName} | Klant: ${task.clientName}",
                                 fontSize = 12.sp,
-                                color = Color.Gray
+                                color = TextMuted
                             )
                             Text(
                                 text = "Datum: ${task.scheduledDate} | Geschat: ${task.estimatedHours}u | Geregistreerd: ${task.actualHours}u",
                                 fontSize = 12.sp,
-                                color = Color.Gray
+                                color = TextMuted
                             )
 
                             Spacer(modifier = Modifier.height(8.dp))
-                            HorizontalDivider(color = Color(0xFFEEEEEE))
-                            Spacer(modifier = Modifier.height(6.dp))
+                            HorizontalDivider(color = DarkCardBorder)
+                            Spacer(modifier = Modifier.height(8.dp))
 
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
@@ -1102,22 +1076,24 @@ private fun AdminPlanningTab(
                                     OutlinedButton(
                                         onClick = { onStatusChange(task.id, "Gepland") },
                                         contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp, vertical = 2.dp)
-                                    ) { Text("Gepland", fontSize = 11.sp) }
+                                    ) { Text("Gepland", fontSize = 11.sp, color = TextPrimary) }
                                     OutlinedButton(
                                         onClick = { onStatusChange(task.id, "In uitvoering") },
                                         contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp, vertical = 2.dp)
-                                    ) { Text("In uitvoering", fontSize = 11.sp) }
+                                    ) { Text("In uitvoering", fontSize = 11.sp, color = TextPrimary) }
                                     OutlinedButton(
                                         onClick = { onStatusChange(task.id, "Afgerond") },
                                         contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp, vertical = 2.dp)
-                                    ) { Text("Afgerond", fontSize = 11.sp) }
+                                    ) { Text("Afgerond", fontSize = 11.sp, color = TextPrimary) }
                                 }
 
                                 Button(
                                     onClick = { onDeleteTask(task) },
-                                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFC0392B)),
+                                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFDC2626)),
                                     contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp, vertical = 2.dp)
-                                ) { Text("Verwijderen", fontSize = 11.sp) }
+                                ) {
+                                    Text("Verwijderen", fontSize = 11.sp, color = Color.White)
+                                }
                             }
                         }
                     }
@@ -1135,19 +1111,20 @@ private fun AdminAuditTab(
         Text(
             text = "Centraal Beveiligings- & Auditlogboek (${logs.size})",
             fontWeight = FontWeight.Bold,
-            fontSize = 15.sp
+            fontSize = 16.sp,
+            color = TextPrimary
         )
         Text(
-            text = "Overzicht van acties, inlogpogingen, rolwisselingen en accountmutaties",
+            text = "Overzicht van acties, inlogpogingen en accountmutaties",
             fontSize = 12.sp,
-            color = Color.Gray
+            color = TextMuted
         )
 
         Spacer(modifier = Modifier.height(10.dp))
 
         if (logs.isEmpty()) {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text("Geen logs aanwezig.", color = Color.Gray)
+                Text("Geen logs aanwezig.", color = TextMuted)
             }
         } else {
             LazyColumn(
@@ -1157,10 +1134,10 @@ private fun AdminAuditTab(
                 items(logs, key = { it.id }) { log ->
                     Card(
                         modifier = Modifier.fillMaxWidth(),
-                        colors = CardDefaults.cardColors(containerColor = Color.White),
-                        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+                        colors = CardDefaults.cardColors(containerColor = DarkCardSurface),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, DarkCardBorder)
                     ) {
-                        Column(modifier = Modifier.padding(10.dp)) {
+                        Column(modifier = Modifier.padding(12.dp)) {
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.SpaceBetween
@@ -1169,19 +1146,19 @@ private fun AdminAuditTab(
                                     text = log.actionType,
                                     fontWeight = FontWeight.Bold,
                                     fontSize = 13.sp,
-                                    color = if (log.severity == "SECURITY_ALERT" || log.severity == "WARNING") Color.Red else Color.Black
+                                    color = if (log.severity == "SECURITY_ALERT" || log.severity == "WARNING") StatusDanger else PrimaryBlueGlow
                                 )
                                 Text(
                                     text = "${log.actorUsername} (${log.actorRole})",
                                     fontSize = 11.sp,
-                                    color = Color.Gray
+                                    color = TextMuted
                                 )
                             }
                             Spacer(modifier = Modifier.height(2.dp))
                             Text(
                                 text = log.details,
                                 fontSize = 12.sp,
-                                color = Color.DarkGray
+                                color = TextSecondary
                             )
                         }
                     }
@@ -1209,54 +1186,27 @@ private fun CreateTaskDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Nieuwe Taak Inplannen", fontWeight = FontWeight.Bold) },
+        containerColor = DarkCardSurface,
+        title = { Text("Nieuwe Taak Inplannen", fontWeight = FontWeight.Bold, color = TextPrimary) },
         text = {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
                     .verticalScroll(rememberScrollState())
             ) {
-                OutlinedTextField(
-                    value = title,
-                    onValueChange = { title = it },
-                    label = { Text("Taaktitel") },
-                    modifier = Modifier.fillMaxWidth()
-                )
+                DarkTextField(value = title, onValueChange = { title = it }, label = "Taaktitel")
                 Spacer(modifier = Modifier.height(6.dp))
-                OutlinedTextField(
-                    value = desc,
-                    onValueChange = { desc = it },
-                    label = { Text("Omschrijving") },
-                    modifier = Modifier.fillMaxWidth()
-                )
+                DarkTextField(value = desc, onValueChange = { desc = it }, label = "Omschrijving")
                 Spacer(modifier = Modifier.height(6.dp))
-                OutlinedTextField(
-                    value = workerUser,
-                    onValueChange = { workerUser = it },
-                    label = { Text("Toegewezen Werker gebruikersnaam") },
-                    modifier = Modifier.fillMaxWidth()
-                )
+                DarkTextField(value = workerUser, onValueChange = { workerUser = it }, label = "Toegewezen Werker gebruikersnaam")
                 Spacer(modifier = Modifier.height(6.dp))
-                OutlinedTextField(
-                    value = clientUser,
-                    onValueChange = { clientUser = it },
-                    label = { Text("Klant gebruikersnaam") },
-                    modifier = Modifier.fillMaxWidth()
-                )
+                DarkTextField(value = clientUser, onValueChange = { clientUser = it }, label = "Klant gebruikersnaam")
                 Spacer(modifier = Modifier.height(6.dp))
-                OutlinedTextField(
-                    value = date,
-                    onValueChange = { date = it },
-                    label = { Text("Geplande datum/tijd") },
-                    modifier = Modifier.fillMaxWidth()
-                )
+                DarkTextField(value = date, onValueChange = { date = it }, label = "Geplande datum/tijd")
                 Spacer(modifier = Modifier.height(6.dp))
-                OutlinedTextField(
-                    value = hours,
-                    onValueChange = { hours = it },
-                    label = { Text("Geschatte uren") },
-                    modifier = Modifier.fillMaxWidth()
-                )
+                DarkTextField(value = hours, onValueChange = { hours = it }, label = "Geschatte uren")
+                Spacer(modifier = Modifier.height(6.dp))
+                DarkTextField(value = loc, onValueChange = { loc = it }, label = "Werklocatie")
             }
         },
         confirmButton = {
@@ -1266,11 +1216,38 @@ private fun CreateTaskDialog(
                         val parsedHours = hours.toDoubleOrNull() ?: 1.0
                         onConfirm(title, desc, workerUser, workerName, clientUser, clientName, priority, date, parsedHours, loc)
                     }
-                }
-            ) { Text("Opslaan") }
+                },
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2563EB))
+            ) {
+                Text("Opslaan", color = Color.White)
+            }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Annuleren") }
+            TextButton(onClick = onDismiss) { Text("Annuleren", color = TextSecondary) }
         }
+    )
+}
+
+@Composable
+fun DarkTextField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    label: String,
+    modifier: Modifier = Modifier.fillMaxWidth()
+) {
+    OutlinedTextField(
+        value = value,
+        onValueChange = onValueChange,
+        label = { Text(label, color = TextMuted) },
+        singleLine = true,
+        colors = OutlinedTextFieldDefaults.colors(
+            focusedTextColor = TextPrimary,
+            unfocusedTextColor = TextPrimary,
+            focusedBorderColor = PrimaryBlueGlow,
+            unfocusedBorderColor = DarkCardBorder,
+            focusedContainerColor = DarkAppBackground,
+            unfocusedContainerColor = DarkAppBackground
+        ),
+        modifier = modifier
     )
 }

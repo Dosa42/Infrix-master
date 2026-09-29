@@ -1,5 +1,6 @@
 package com.example.ui.screens
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -12,15 +13,17 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
+import androidx.compose.material3.TabRowDefaults
+import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -39,6 +42,18 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.model.PlanningTaskEntity
 import com.example.data.model.ServiceRequestEntity
+import com.example.ui.theme.DarkAppBackground
+import com.example.ui.theme.DarkCardBorder
+import com.example.ui.theme.DarkCardSurface
+import com.example.ui.theme.DarkCardSurfaceVariant
+import com.example.ui.theme.KlantPrimary
+import com.example.ui.theme.PrimaryBlueGlow
+import com.example.ui.theme.StatusInfo
+import com.example.ui.theme.StatusSuccess
+import com.example.ui.theme.StatusWarning
+import com.example.ui.theme.TextMuted
+import com.example.ui.theme.TextPrimary
+import com.example.ui.theme.TextSecondary
 import com.example.ui.viewmodel.DashboardViewModel
 
 @Composable
@@ -52,20 +67,20 @@ fun ClientDashboardScreen(
     val securityAlert by viewModel.securityAlert.collectAsState()
 
     var selectedTab by remember { mutableIntStateOf(0) }
-    val tabs = listOf("Mijn Werken & Status", "Mijn Aanvragen")
+    val tabs = listOf("Mijn Werken & Status (${myTasks.size})", "Mijn Aanvragen (${myRequests.size})")
 
     var showNewRequestDialog by remember { mutableStateOf(false) }
 
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color(0xFFF4F4F4))
+            .background(DarkAppBackground)
     ) {
         // Top Bar
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(Color(0xFF0F766E))
+                .background(Color(0xFF0F172A))
                 .padding(horizontal = 16.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
@@ -73,22 +88,23 @@ fun ClientDashboardScreen(
             Column {
                 Text(
                     text = "Klant Portaal",
-                    color = Color.White,
+                    color = TextPrimary,
                     fontWeight = FontWeight.Bold,
                     fontSize = 18.sp
                 )
                 Text(
-                    text = "Ingelogd: ${currentUser?.fullName ?: "Klant"} (Beperkte leesrechten)",
-                    color = Color(0xFFCCFBF1),
+                    text = "Ingelogd: ${currentUser?.fullName ?: "Klant"} (@${currentUser?.username})",
+                    color = KlantPrimary,
+                    fontWeight = FontWeight.Medium,
                     fontSize = 12.sp
                 )
             }
             Button(
                 onClick = onLogout,
-                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFC0392B)),
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFDC2626)),
                 modifier = Modifier.testTag("client_logout_button")
             ) {
-                Text("Uitloggen", fontSize = 12.sp)
+                Text("Uitloggen", fontSize = 12.sp, color = Color.White, fontWeight = FontWeight.Bold)
             }
         }
 
@@ -96,25 +112,42 @@ fun ClientDashboardScreen(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(Color(0xFFE6FFFA))
+                .background(DarkCardSurfaceVariant)
                 .padding(horizontal = 16.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
-                text = "Autoriteitsniveau: KLANT (Beperkte leesrechten. U kunt alleen uw eigen status inzien).",
+                text = "Autoriteitsniveau: KLANT (Alleen toegang tot eigen projecten en verzoeken).",
                 fontSize = 12.sp,
                 fontWeight = FontWeight.Medium,
-                color = Color(0xFF0D5F58)
+                color = TextSecondary
             )
         }
 
         // Tab Row
-        TabRow(selectedTabIndex = selectedTab) {
+        TabRow(
+            selectedTabIndex = selectedTab,
+            containerColor = Color(0xFF0F172A),
+            contentColor = TextPrimary,
+            indicator = { tabPositions ->
+                TabRowDefaults.SecondaryIndicator(
+                    Modifier.tabIndicatorOffset(tabPositions[selectedTab]),
+                    color = KlantPrimary
+                )
+            }
+        ) {
             tabs.forEachIndexed { index, title ->
                 Tab(
                     selected = selectedTab == index,
                     onClick = { selectedTab = index },
-                    text = { Text(title, fontSize = 12.sp, fontWeight = FontWeight.SemiBold) }
+                    text = {
+                        Text(
+                            text = title,
+                            fontSize = 12.sp,
+                            fontWeight = if (selectedTab == index) FontWeight.Bold else FontWeight.Medium,
+                            color = if (selectedTab == index) KlantPrimary else TextSecondary
+                        )
+                    }
                 )
             }
         }
@@ -131,13 +164,13 @@ fun ClientDashboardScreen(
         }
     }
 
-    // Modal: Aanvraag indienen
+    // Modal: Nieuwe Aanvraag Indienen
     if (showNewRequestDialog) {
         CreateServiceRequestDialog(
             onDismiss = { showNewRequestDialog = false },
-            onConfirm = { title, desc, date, urg ->
-                viewModel.submitServiceRequest(title, desc, date, urg) { ok ->
-                    if (ok) showNewRequestDialog = false
+            onConfirm = { title, desc, date, urgency ->
+                viewModel.submitServiceRequest(title, desc, date, urgency) { success ->
+                    if (success) showNewRequestDialog = false
                 }
             }
         )
@@ -155,16 +188,22 @@ private fun ClientTasksTab(
 ) {
     Column(modifier = Modifier.fillMaxSize()) {
         Text(
-            text = "Mijn Opdrachten & Voortgang (${tasks.size})",
+            text = "Lopende Werken & Status (${tasks.size})",
             fontWeight = FontWeight.Bold,
-            fontSize = 15.sp
+            fontSize = 16.sp,
+            color = TextPrimary
+        )
+        Text(
+            text = "Overzicht van planning en actuele voortgang van uw opdrachten",
+            fontSize = 12.sp,
+            color = TextMuted
         )
 
-        Spacer(modifier = Modifier.height(8.dp))
+        Spacer(modifier = Modifier.height(10.dp))
 
         if (tasks.isEmpty()) {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text("U heeft momenteel geen actieve werkorders.", color = Color.Gray)
+                Text("Er zijn momenteel geen actieve werkorders voor uw account.", color = TextMuted)
             }
         } else {
             LazyColumn(
@@ -174,10 +213,11 @@ private fun ClientTasksTab(
                 items(tasks, key = { it.id }) { task ->
                     Card(
                         modifier = Modifier.fillMaxWidth(),
-                        colors = CardDefaults.cardColors(containerColor = Color.White),
-                        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+                        colors = CardDefaults.cardColors(containerColor = DarkCardSurface),
+                        border = BorderStroke(1.dp, DarkCardBorder),
+                        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
                     ) {
-                        Column(modifier = Modifier.padding(12.dp)) {
+                        Column(modifier = Modifier.padding(14.dp)) {
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.SpaceBetween
@@ -185,49 +225,36 @@ private fun ClientTasksTab(
                                 Text(
                                     text = task.title,
                                     fontWeight = FontWeight.Bold,
-                                    fontSize = 14.sp,
+                                    fontSize = 15.sp,
+                                    color = TextPrimary,
                                     modifier = Modifier.weight(1f)
                                 )
                                 Text(
-                                    text = task.status,
+                                    text = task.clientVisibleStatus,
                                     fontWeight = FontWeight.Bold,
                                     fontSize = 12.sp,
                                     color = when (task.status) {
-                                        "In uitvoering" -> Color(0xFF0F766E)
-                                        "Afgerond" -> Color(0xFF27AE60)
-                                        else -> Color(0xFFD97706)
+                                        "In uitvoering" -> StatusInfo
+                                        "Afgerond" -> StatusSuccess
+                                        else -> StatusWarning
                                     }
                                 )
                             }
 
                             Spacer(modifier = Modifier.height(4.dp))
-                            Text(text = task.description, fontSize = 13.sp, color = Color.DarkGray)
+                            Text(text = task.description, fontSize = 13.sp, color = TextSecondary)
                             Spacer(modifier = Modifier.height(6.dp))
 
-                            Text(
-                                text = "Huidige status: ${task.clientVisibleStatus}",
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                color = Color(0xFF0F766E)
-                            )
                             Text(
                                 text = "Toegewezen Monteur: ${task.assignedWorkerName}",
                                 fontSize = 12.sp,
-                                color = Color.Gray
+                                color = KlantPrimary,
+                                fontWeight = FontWeight.Medium
                             )
                             Text(
-                                text = "Geplande datum: ${task.scheduledDate}",
-                                fontSize = 12.sp,
-                                color = Color.Gray
-                            )
-
-                            Spacer(modifier = Modifier.height(6.dp))
-                            HorizontalDivider(color = Color(0xFFEEEEEE))
-                            Spacer(modifier = Modifier.height(4.dp))
-                            Text(
-                                text = "Alleen-lezen weergave",
+                                text = "Geplande datum: ${task.scheduledDate} | Locatie: ${task.location}",
                                 fontSize = 11.sp,
-                                color = Color.Gray
+                                color = TextMuted
                             )
                         }
                     }
@@ -249,24 +276,25 @@ private fun ClientRequestsTab(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
-                text = "Mijn Ingediende Aanvragen (${requests.size})",
+                text = "Mijn Serviceaanvragen (${requests.size})",
                 fontWeight = FontWeight.Bold,
-                fontSize = 15.sp
+                fontSize = 16.sp,
+                color = TextPrimary
             )
             Button(
                 onClick = onNewRequestClick,
-                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0F766E)),
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0D9488)),
                 modifier = Modifier.testTag("client_new_request_button")
             ) {
-                Text("+ Aanvraag Indienen", fontSize = 12.sp)
+                Text("+ Nieuwe Aanvraag", fontSize = 12.sp, color = Color.White, fontWeight = FontWeight.Bold)
             }
         }
 
-        Spacer(modifier = Modifier.height(8.dp))
+        Spacer(modifier = Modifier.height(10.dp))
 
         if (requests.isEmpty()) {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text("U heeft nog geen serviceaanvragen ingediend.", color = Color.Gray)
+                Text("U heeft nog geen serviceaanvragen ingediend.", color = TextMuted)
             }
         } else {
             LazyColumn(
@@ -276,26 +304,30 @@ private fun ClientRequestsTab(
                 items(requests, key = { it.id }) { req ->
                     Card(
                         modifier = Modifier.fillMaxWidth(),
-                        colors = CardDefaults.cardColors(containerColor = Color.White),
-                        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+                        colors = CardDefaults.cardColors(containerColor = DarkCardSurface),
+                        border = BorderStroke(1.dp, DarkCardBorder)
                     ) {
-                        Column(modifier = Modifier.padding(12.dp)) {
+                        Column(modifier = Modifier.padding(14.dp)) {
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.SpaceBetween
                             ) {
-                                Text(text = req.title, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                                Text(text = req.title, fontWeight = FontWeight.Bold, fontSize = 15.sp, color = TextPrimary)
                                 Text(
                                     text = req.status,
                                     fontWeight = FontWeight.Bold,
                                     fontSize = 12.sp,
-                                    color = Color(0xFF0F766E)
+                                    color = when (req.status) {
+                                        "Voltooid" -> StatusSuccess
+                                        "In Behandeling" -> StatusInfo
+                                        else -> StatusWarning
+                                    }
                                 )
                             }
                             Spacer(modifier = Modifier.height(4.dp))
-                            Text(text = req.description, fontSize = 13.sp, color = Color.DarkGray)
-                            Spacer(modifier = Modifier.height(4.dp))
-                            Text(text = "Gewenste datum: ${req.preferredDate} | Urgentie: ${req.urgency}", fontSize = 12.sp, color = Color.Gray)
+                            Text(text = req.description, fontSize = 13.sp, color = TextSecondary)
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Text(text = "Gewenste datum: ${req.preferredDate} | Urgentie: ${req.urgency}", fontSize = 11.sp, color = TextMuted)
                         }
                     }
                 }
@@ -316,29 +348,15 @@ private fun CreateServiceRequestDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Nieuwe Serviceaanvraag", fontWeight = FontWeight.Bold) },
+        containerColor = DarkCardSurface,
+        title = { Text("Nieuwe Serviceaanvraag", fontWeight = FontWeight.Bold, color = TextPrimary) },
         text = {
             Column(modifier = Modifier.fillMaxWidth()) {
-                OutlinedTextField(
-                    value = title,
-                    onValueChange = { title = it },
-                    label = { Text("Titel van de aanvraag") },
-                    modifier = Modifier.fillMaxWidth()
-                )
+                DarkTextField(value = title, onValueChange = { title = it }, label = "Titel van de aanvraag")
                 Spacer(modifier = Modifier.height(8.dp))
-                OutlinedTextField(
-                    value = desc,
-                    onValueChange = { desc = it },
-                    label = { Text("Omschrijving van het probleem/verzoek") },
-                    modifier = Modifier.fillMaxWidth()
-                )
+                DarkTextField(value = desc, onValueChange = { desc = it }, label = "Omschrijving van het probleem/verzoek")
                 Spacer(modifier = Modifier.height(8.dp))
-                OutlinedTextField(
-                    value = date,
-                    onValueChange = { date = it },
-                    label = { Text("Voorkeursdatum") },
-                    modifier = Modifier.fillMaxWidth()
-                )
+                DarkTextField(value = date, onValueChange = { date = it }, label = "Voorkeursdatum")
             }
         },
         confirmButton = {
@@ -347,13 +365,14 @@ private fun CreateServiceRequestDialog(
                     if (title.isNotBlank() && desc.isNotBlank()) {
                         onConfirm(title, desc, date, urgency)
                     }
-                }
+                },
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0D9488))
             ) {
-                Text("Indienen")
+                Text("Indienen", color = Color.White)
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Annuleren") }
+            TextButton(onClick = onDismiss) { Text("Annuleren", color = TextSecondary) }
         }
     )
 }

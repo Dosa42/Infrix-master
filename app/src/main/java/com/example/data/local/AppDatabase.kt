@@ -7,6 +7,7 @@ import androidx.room.RoomDatabase
 import androidx.room.TypeConverters
 import androidx.sqlite.db.SupportSQLiteDatabase
 import com.example.data.model.AuditLogEntity
+import com.example.data.model.CalendarEventEntity
 import com.example.data.model.PlanningTaskEntity
 import com.example.data.model.ServiceRequestEntity
 import com.example.data.model.UserEntity
@@ -23,9 +24,10 @@ import kotlinx.coroutines.launch
         PlanningTaskEntity::class,
         WorkLogEntity::class,
         ServiceRequestEntity::class,
-        AuditLogEntity::class
+        AuditLogEntity::class,
+        CalendarEventEntity::class
     ],
-    version = 5,
+    version = 6,
     exportSchema = false
 )
 @TypeConverters(RoleConverters::class)
@@ -36,6 +38,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun workLogDao(): WorkLogDao
     abstract fun serviceRequestDao(): ServiceRequestDao
     abstract fun auditLogDao(): AuditLogDao
+    abstract fun calendarDao(): CalendarDao
 
     companion object {
         @Volatile

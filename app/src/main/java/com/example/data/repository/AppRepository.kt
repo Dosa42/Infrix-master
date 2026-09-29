@@ -1,6 +1,7 @@
 package com.example.data.repository
 
 import android.content.Context
+import com.example.data.backend.CalendarBackendService
 import com.example.data.backend.CloudSyncStatus
 import com.example.data.backend.DeviceCapabilitiesManager
 import com.example.data.backend.DevicePermissionStatus
@@ -14,6 +15,7 @@ import com.example.data.backend.SearchResultItem
 import com.example.data.backend.ServerStorageManager
 import com.example.data.local.AppDatabase
 import com.example.data.model.AuditLogEntity
+import com.example.data.model.CalendarEventEntity
 import com.example.data.model.PlanningTaskEntity
 import com.example.data.model.ServiceRequestEntity
 import com.example.data.model.UserEntity
@@ -27,6 +29,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 
 class AppRepository(
@@ -39,6 +42,7 @@ class AppRepository(
     private val workLogDao = database.workLogDao()
     private val serviceRequestDao = database.serviceRequestDao()
     private val auditLogDao = database.auditLogDao()
+    private val calendarDao = database.calendarDao()
 
     // Backend Services
     val deviceCapabilitiesManager = DeviceCapabilitiesManager(context)
@@ -46,6 +50,7 @@ class AppRepository(
     val googleMapsIntegrationService = GoogleMapsIntegrationService(context)
     val searchIntegrationService = SearchIntegrationService(context)
     val serverStorageManager = ServerStorageManager(database)
+    val calendarBackendService = CalendarBackendService(context)
 
     private val _currentUser = MutableStateFlow<UserEntity?>(null)
     val currentUser: StateFlow<UserEntity?> = _currentUser.asStateFlow()
@@ -56,6 +61,19 @@ class AppRepository(
     val allWorkLogs: Flow<List<WorkLogEntity>> = workLogDao.getAllWorkLogs()
     val allServiceRequests: Flow<List<ServiceRequestEntity>> = serviceRequestDao.getAllRequests()
     val recentAuditLogs: Flow<List<AuditLogEntity>> = auditLogDao.getRecentLogs(200)
+    val allCalendarEvents: Flow<List<CalendarEventEntity>> = calendarDao.getAllEvents()
+
+    fun getCalendarEventsForDate(date: String): Flow<List<CalendarEventEntity>> {
+        return calendarDao.getEventsForDate(date)
+    }
+
+    fun getCalendarEventsForWorker(workerUsername: String): Flow<List<CalendarEventEntity>> {
+        return calendarDao.getEventsForWorker(workerUsername)
+    }
+
+    fun getCalendarEventsForClient(clientUsername: String): Flow<List<CalendarEventEntity>> {
+        return calendarDao.getEventsForClient(clientUsername)
+    }
 
     fun getTasksForWorker(workerUsername: String): Flow<List<PlanningTaskEntity>> {
         return planningDao.getTasksForWorker(workerUsername)
@@ -550,29 +568,36 @@ class AppRepository(
         if (guard is SecurityResult.Denied) return@withContext guard
 
         planningDao.deleteTask(task)
+        calendarDao.deleteEventByTaskId(task.id)
         auditLogDao.insertLog(
             SecurityManager.createAuditLog(
                 actor,
                 "TASK_DELETED",
-                "Planningstaak '${task.title}' verwijderd.",
+                "Planningstaak '${task.title}' verwijderd (inclusief gekoppelde kalender-afspraak).",
                 "INFO"
             )
         )
         SecurityResult.Success(Unit)
     }
 
-    // Planning & Taken
+    // Planning & Taken met Default Kalender Synchronisatie
     suspend fun createPlanningTask(task: PlanningTaskEntity): SecurityResult<Long> = withContext(Dispatchers.IO) {
         val actor = _currentUser.value
         val guard = SecurityManager.checkPermission(actor, UserRole.WERKER, "Planningstaak aanmaken")
         if (guard is SecurityResult.Denied) return@withContext guard
 
         val id = planningDao.insertTask(task)
+        val createdTask = task.copy(id = id)
+
+        // Automatische Default Synchronisatie met Backend Kalender
+        val calendarEvent = calendarBackendService.syncPlanningTaskToCalendar(createdTask)
+        calendarDao.insertEvent(calendarEvent)
+
         auditLogDao.insertLog(
             SecurityManager.createAuditLog(
                 actor,
                 "TASK_CREATED",
-                "Planningstaak '${task.title}' aangemaakt voor werker '${task.assignedWorkerUsername}'.",
+                "Planningstaak '${task.title}' aangemaakt voor werker '${task.assignedWorkerUsername}' en automatisch synchroon in de kalender geplaatst.",
                 "INFO"
             )
         )
@@ -618,11 +643,22 @@ class AppRepository(
         )
         planningDao.updateTask(updated)
 
+        // Kalender event synchroniseren
+        val existingEvent = calendarDao.getEventByTaskId(taskId)
+        if (existingEvent != null) {
+            val updatedEvent = existingEvent.copy(
+                description = "${updated.description}\n\nStatus: ${updated.status}\nGeschatte uren: ${updated.estimatedHours}u",
+                priority = updated.priority,
+                updatedAt = System.currentTimeMillis()
+            )
+            calendarDao.updateEvent(updatedEvent)
+        }
+
         auditLogDao.insertLog(
             SecurityManager.createAuditLog(
                 actor,
                 "TASK_STATUS_UPDATED",
-                "Taak '${updated.title}' gewijzigd naar '$newStatus'.",
+                "Taak '${updated.title}' gewijzigd naar '$newStatus' en kalender bijgewerkt.",
                 "INFO"
             )
         )
@@ -674,7 +710,7 @@ class AppRepository(
         SecurityResult.Success(id)
     }
 
-    // Client aanvragen
+    // Client aanvragen met Default Kalender Synchronisatie
     suspend fun submitServiceRequest(
         title: String,
         description: String,
@@ -703,11 +739,17 @@ class AppRepository(
             status = "Nieuw ingediend"
         )
         val id = serviceRequestDao.insertRequest(request)
+        val createdRequest = request.copy(id = id)
+
+        // Automatisch als kalender-item synchroon inschieten
+        val calendarEvent = calendarBackendService.syncServiceRequestToCalendar(createdRequest)
+        calendarDao.insertEvent(calendarEvent)
+
         auditLogDao.insertLog(
             SecurityManager.createAuditLog(
                 actor,
                 "REQUEST_SUBMITTED",
-                "Klant '${actor.username}' heeft serviceaanvraag '$title' ingediend.",
+                "Klant '${actor.username}' heeft serviceaanvraag '$title' ingediend en gesynchroniseerd in de kalender.",
                 "INFO"
             )
         )
@@ -733,4 +775,150 @@ class AppRepository(
         )
         SecurityResult.Success(Unit)
     }
+
+    // ==========================================
+    // BACKEND KALENDER & VOLLEDIGE SYNCHRONISATIE
+    // ==========================================
+
+    suspend fun createCalendarEvent(
+        title: String,
+        description: String,
+        eventDate: String,
+        startTime: String,
+        endTime: String,
+        location: String,
+        workerUsername: String,
+        workerName: String,
+        clientUsername: String,
+        clientName: String,
+        priority: String = "Normaal",
+        calendarColorHex: String = "#38BDF8"
+    ): SecurityResult<Long> = withContext(Dispatchers.IO) {
+        val actor = _currentUser.value
+        val guard = SecurityManager.checkPermission(actor, UserRole.WERKER, "Kalenderafspraak inplannen")
+        if (guard is SecurityResult.Denied) return@withContext guard
+
+        val mapsUrl = calendarBackendService.generateDirectionsUrl(location)
+        val searchQuery = calendarBackendService.generateGoogleSearchQuery(title, clientName, location)
+
+        val event = CalendarEventEntity(
+            title = title.trim(),
+            description = description.trim(),
+            eventDate = eventDate.trim(),
+            startTime = startTime.trim(),
+            endTime = endTime.trim(),
+            location = location.trim(),
+            workerUsername = workerUsername.trim(),
+            workerName = workerName.trim(),
+            clientUsername = clientUsername.trim(),
+            clientName = clientName.trim(),
+            googleSearchQuery = searchQuery,
+            googleMapsUrl = mapsUrl,
+            syncStatus = "SYNCHRONIZED",
+            isSyncedWithGoogleCalendar = true,
+            priority = priority,
+            calendarColorHex = calendarColorHex
+        )
+
+        val id = calendarDao.insertEvent(event)
+        auditLogDao.insertLog(
+            SecurityManager.createAuditLog(
+                actor,
+                "CALENDAR_EVENT_CREATED",
+                "Nieuwe kalenderafspraak '$title' aangemaakt voor datum $eventDate met Maps & Search koppeling.",
+                "INFO"
+            )
+        )
+        SecurityResult.Success(id)
+    }
+
+    suspend fun updateCalendarEvent(event: CalendarEventEntity): SecurityResult<Unit> = withContext(Dispatchers.IO) {
+        val actor = _currentUser.value
+        val guard = SecurityManager.checkPermission(actor, UserRole.WERKER, "Kalenderafspraak bewerken")
+        if (guard is SecurityResult.Denied) return@withContext guard
+
+        val mapsUrl = if (event.location.isNotBlank()) calendarBackendService.generateDirectionsUrl(event.location) else event.googleMapsUrl
+        val searchQuery = calendarBackendService.generateGoogleSearchQuery(event.title, event.clientName, event.location)
+
+        val updated = event.copy(
+            googleMapsUrl = mapsUrl,
+            googleSearchQuery = searchQuery,
+            updatedAt = System.currentTimeMillis()
+        )
+        calendarDao.updateEvent(updated)
+        auditLogDao.insertLog(
+            SecurityManager.createAuditLog(
+                actor,
+                "CALENDAR_EVENT_UPDATED",
+                "Kalenderafspraak '${event.title}' bijgewerkt.",
+                "INFO"
+            )
+        )
+        SecurityResult.Success(Unit)
+    }
+
+    suspend fun deleteCalendarEvent(id: Long): SecurityResult<Unit> = withContext(Dispatchers.IO) {
+        val actor = _currentUser.value
+        val guard = SecurityManager.checkPermission(actor, UserRole.WERKER, "Kalenderafspraak verwijderen")
+        if (guard is SecurityResult.Denied) return@withContext guard
+
+        calendarDao.deleteEventById(id)
+        auditLogDao.insertLog(
+            SecurityManager.createAuditLog(
+                actor,
+                "CALENDAR_EVENT_DELETED",
+                "Kalenderafspraak #$id verwijderd.",
+                "INFO"
+            )
+        )
+        SecurityResult.Success(Unit)
+    }
+
+    /**
+     * Synchroniseert in één klik alle Planning Taken, Service Aanvragen, Werker & Klant allocaties
+     * met Google Maps en Google Search in de centrale kalender.
+     */
+    suspend fun syncAllEntitiesToCalendar(): SecurityResult<Int> = withContext(Dispatchers.IO) {
+        val actor = _currentUser.value
+        val guard = SecurityManager.checkPermission(actor, UserRole.ADMIN, "Centrale kalender auto-synchronisatie")
+        if (guard is SecurityResult.Denied) return@withContext guard
+
+        val tasks = planningDao.getAllTasks().first()
+        val requests = serviceRequestDao.getAllRequests().first()
+
+        var syncCount = 0
+
+        for (task in tasks) {
+            val existing = calendarDao.getEventByTaskId(task.id)
+            val generated = calendarBackendService.syncPlanningTaskToCalendar(task)
+            if (existing != null) {
+                calendarDao.updateEvent(generated.copy(id = existing.id, createdAt = existing.createdAt))
+            } else {
+                calendarDao.insertEvent(generated)
+            }
+            syncCount++
+        }
+
+        for (req in requests) {
+            val existing = calendarDao.getEventByRequestId(req.id)
+            val generated = calendarBackendService.syncServiceRequestToCalendar(req)
+            if (existing != null) {
+                calendarDao.updateEvent(generated.copy(id = existing.id, createdAt = existing.createdAt))
+            } else {
+                calendarDao.insertEvent(generated)
+            }
+            syncCount++
+        }
+
+        auditLogDao.insertLog(
+            SecurityManager.createAuditLog(
+                actor,
+                "CALENDAR_FULL_SYNC",
+                "Volledige synchronisatie uitgevoerd: $syncCount items gesynchroniseerd met werkers, klanten, Maps & Search.",
+                "INFO"
+            )
+        )
+        SecurityResult.Success(syncCount)
+    }
 }
+

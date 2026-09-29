@@ -54,7 +54,10 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         setContent {
             MyApplicationTheme {
-                Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
+                Scaffold(
+                    modifier = Modifier.fillMaxSize(),
+                    containerColor = com.example.ui.theme.DarkAppBackground
+                ) { innerPadding ->
                     RoleVaultApp(
                         authViewModel = authViewModel,
                         dashboardViewModel = dashboardViewModel,

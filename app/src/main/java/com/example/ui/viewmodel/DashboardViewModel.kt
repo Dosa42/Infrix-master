@@ -48,6 +48,25 @@ class DashboardViewModel(private val repository: AppRepository) : ViewModel() {
     val auditLogs: StateFlow<List<AuditLogEntity>> = repository.recentAuditLogs
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    val allCalendarEvents: StateFlow<List<com.example.data.model.CalendarEventEntity>> = repository.allCalendarEvents
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val workerCalendarEvents: StateFlow<List<com.example.data.model.CalendarEventEntity>> = currentUser.flatMapLatest { user ->
+        if (user != null) {
+            repository.getCalendarEventsForWorker(user.username)
+        } else {
+            flowOf(emptyList())
+        }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val clientCalendarEvents: StateFlow<List<com.example.data.model.CalendarEventEntity>> = currentUser.flatMapLatest { user ->
+        if (user != null) {
+            repository.getCalendarEventsForClient(user.username)
+        } else {
+            flowOf(emptyList())
+        }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
     val workerTasks: StateFlow<List<PlanningTaskEntity>> = currentUser.flatMapLatest { user ->
         if (user != null && user.role.authorityLevel >= UserRole.WERKER.authorityLevel) {
             repository.getTasksForWorker(user.username)
@@ -406,6 +425,98 @@ class DashboardViewModel(private val repository: AppRepository) : ViewModel() {
             val status = repository.serverStorageManager.syncToServerEndpoint(endpoint)
             onComplete(status)
         }
+    }
+
+    // 6. Backend Agenda & Kalender Synchronisatie
+    fun createCalendarEvent(
+        title: String,
+        description: String,
+        eventDate: String,
+        startTime: String,
+        endTime: String,
+        location: String,
+        workerUsername: String,
+        workerName: String,
+        clientUsername: String,
+        clientName: String,
+        priority: String = "Normaal",
+        calendarColorHex: String = "#38BDF8",
+        onComplete: (Boolean) -> Unit
+    ) {
+        viewModelScope.launch {
+            when (val res = repository.createCalendarEvent(
+                title, description, eventDate, startTime, endTime,
+                location, workerUsername, workerName, clientUsername, clientName, priority, calendarColorHex
+            )) {
+                is SecurityResult.Success -> onComplete(true)
+                is SecurityResult.Denied -> {
+                    showDeniedAlert(res)
+                    onComplete(false)
+                }
+            }
+        }
+    }
+
+    fun updateCalendarEvent(
+        event: com.example.data.model.CalendarEventEntity,
+        onComplete: (Boolean) -> Unit
+    ) {
+        viewModelScope.launch {
+            when (val res = repository.updateCalendarEvent(event)) {
+                is SecurityResult.Success -> onComplete(true)
+                is SecurityResult.Denied -> {
+                    showDeniedAlert(res)
+                    onComplete(false)
+                }
+            }
+        }
+    }
+
+    fun deleteCalendarEvent(
+        id: Long,
+        onComplete: (Boolean) -> Unit
+    ) {
+        viewModelScope.launch {
+            when (val res = repository.deleteCalendarEvent(id)) {
+                is SecurityResult.Success -> onComplete(true)
+                is SecurityResult.Denied -> {
+                    showDeniedAlert(res)
+                    onComplete(false)
+                }
+            }
+        }
+    }
+
+    fun syncAllToCalendar(onComplete: (Int) -> Unit) {
+        viewModelScope.launch {
+            when (val res = repository.syncAllEntitiesToCalendar()) {
+                is SecurityResult.Success -> onComplete(res.data)
+                is SecurityResult.Denied -> {
+                    showDeniedAlert(res)
+                    onComplete(0)
+                }
+            }
+        }
+    }
+
+    fun exportCalendarIcs(onComplete: (String) -> Unit) {
+        viewModelScope.launch {
+            val events = allCalendarEvents.value
+            val ics = repository.calendarBackendService.exportToIcs(events)
+            onComplete(ics)
+        }
+    }
+
+    fun getGoogleCalendarIntent(event: com.example.data.model.CalendarEventEntity): android.content.Intent {
+        return repository.calendarBackendService.createGoogleCalendarIntent(event)
+    }
+
+    fun getGoogleMapsRouteIntent(location: String): android.content.Intent {
+        return repository.calendarBackendService.createGoogleMapsRouteIntent(location)
+    }
+
+    fun getGoogleSearchIntent(query: String): android.content.Intent {
+        return repository.calendarBackendService.createGoogleSearchIntent(query)
     }
 
     private fun showDeniedAlert(denied: SecurityResult.Denied) {

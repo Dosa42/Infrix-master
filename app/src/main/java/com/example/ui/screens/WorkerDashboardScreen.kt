@@ -1,5 +1,6 @@
 package com.example.ui.screens
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -10,8 +11,11 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -19,9 +23,10 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
+import androidx.compose.material3.TabRowDefaults
+import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -41,6 +46,19 @@ import androidx.compose.ui.unit.sp
 import com.example.data.model.PlanningTaskEntity
 import com.example.data.model.ServiceRequestEntity
 import com.example.data.model.WorkLogEntity
+import com.example.ui.theme.DarkAppBackground
+import com.example.ui.theme.DarkCardBorder
+import com.example.ui.theme.DarkCardSurface
+import com.example.ui.theme.DarkCardSurfaceVariant
+import com.example.ui.theme.PrimaryBlueGlow
+import com.example.ui.theme.StatusDanger
+import com.example.ui.theme.StatusInfo
+import com.example.ui.theme.StatusSuccess
+import com.example.ui.theme.StatusWarning
+import com.example.ui.theme.TextMuted
+import com.example.ui.theme.TextPrimary
+import com.example.ui.theme.TextSecondary
+import com.example.ui.theme.WerkerPrimary
 import com.example.ui.viewmodel.DashboardViewModel
 
 @Composable
@@ -56,20 +74,20 @@ fun WorkerDashboardScreen(
     val securityAlert by viewModel.securityAlert.collectAsState()
 
     var selectedTab by remember { mutableIntStateOf(0) }
-    val tabs = listOf("Mijn Planning", "Algemene Planning", "Klantverzoeken", "Urenregistratie")
+    val tabs = listOf("Mijn Planning (${myTasks.size})", "Algemene Planning", "Klantverzoeken", "Urenregistratie")
 
     var selectedTaskForLog by remember { mutableStateOf<PlanningTaskEntity?>(null) }
 
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color(0xFFF4F4F4))
+            .background(DarkAppBackground)
     ) {
         // Top Bar
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(Color(0xFF0F4C81))
+                .background(Color(0xFF0F172A))
                 .padding(horizontal = 16.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
@@ -77,22 +95,23 @@ fun WorkerDashboardScreen(
             Column {
                 Text(
                     text = "Werker Dashboard",
-                    color = Color.White,
+                    color = TextPrimary,
                     fontWeight = FontWeight.Bold,
                     fontSize = 18.sp
                 )
                 Text(
-                    text = "Ingelogd: ${currentUser?.fullName ?: "Werker"} (Toegang planning)",
-                    color = Color(0xFFD0E1F9),
+                    text = "Ingelogd: ${currentUser?.fullName ?: "Werker"} (@${currentUser?.username})",
+                    color = WerkerPrimary,
+                    fontWeight = FontWeight.Medium,
                     fontSize = 12.sp
                 )
             }
             Button(
                 onClick = onLogout,
-                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFC0392B)),
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFDC2626)),
                 modifier = Modifier.testTag("worker_logout_button")
             ) {
-                Text("Uitloggen", fontSize = 12.sp)
+                Text("Uitloggen", fontSize = 12.sp, color = Color.White, fontWeight = FontWeight.Bold)
             }
         }
 
@@ -100,7 +119,7 @@ fun WorkerDashboardScreen(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(Color(0xFFE3EDF7))
+                .background(DarkCardSurfaceVariant)
                 .padding(horizontal = 16.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -108,17 +127,34 @@ fun WorkerDashboardScreen(
                 text = "Autoriteitsniveau: WERKER (Toegang tot operationele planning & uren).",
                 fontSize = 12.sp,
                 fontWeight = FontWeight.Medium,
-                color = Color(0xFF1B365D)
+                color = TextSecondary
             )
         }
 
         // Tab Row
-        TabRow(selectedTabIndex = selectedTab) {
+        TabRow(
+            selectedTabIndex = selectedTab,
+            containerColor = Color(0xFF0F172A),
+            contentColor = TextPrimary,
+            indicator = { tabPositions ->
+                TabRowDefaults.SecondaryIndicator(
+                    Modifier.tabIndicatorOffset(tabPositions[selectedTab]),
+                    color = WerkerPrimary
+                )
+            }
+        ) {
             tabs.forEachIndexed { index, title ->
                 Tab(
                     selected = selectedTab == index,
                     onClick = { selectedTab = index },
-                    text = { Text(title, fontSize = 12.sp, fontWeight = FontWeight.SemiBold) }
+                    text = {
+                        Text(
+                            text = title,
+                            fontSize = 12.sp,
+                            fontWeight = if (selectedTab == index) FontWeight.Bold else FontWeight.Medium,
+                            color = if (selectedTab == index) WerkerPrimary else TextSecondary
+                        )
+                    }
                 )
             }
         }
@@ -128,6 +164,7 @@ fun WorkerDashboardScreen(
             when (selectedTab) {
                 0 -> WorkerMyTasksTab(
                     tasks = myTasks,
+                    viewModel = viewModel,
                     onStatusChange = { taskId, status -> viewModel.updateTaskStatus(taskId, status) },
                     onLogHoursClick = { task -> selectedTaskForLog = task }
                 )
@@ -163,20 +200,23 @@ fun WorkerDashboardScreen(
 @Composable
 private fun WorkerMyTasksTab(
     tasks: List<PlanningTaskEntity>,
+    viewModel: DashboardViewModel,
     onStatusChange: (Long, String) -> Unit,
     onLogHoursClick: (PlanningTaskEntity) -> Unit
 ) {
+    val context = androidx.compose.ui.platform.LocalContext.current
     Column(modifier = Modifier.fillMaxSize()) {
         Text(
             text = "Toegewezen Taken aan Mij (${tasks.size})",
             fontWeight = FontWeight.Bold,
-            fontSize = 16.sp
+            fontSize = 16.sp,
+            color = TextPrimary
         )
         Spacer(modifier = Modifier.height(8.dp))
 
         if (tasks.isEmpty()) {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text("Geen actieve taken toegewezen aan uw account.", color = Color.Gray)
+                Text("Geen actieve taken toegewezen aan uw account.", color = TextMuted)
             }
         } else {
             LazyColumn(
@@ -186,10 +226,11 @@ private fun WorkerMyTasksTab(
                 items(tasks, key = { it.id }) { task ->
                     Card(
                         modifier = Modifier.fillMaxWidth(),
-                        colors = CardDefaults.cardColors(containerColor = Color.White),
-                        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+                        colors = CardDefaults.cardColors(containerColor = DarkCardSurface),
+                        border = BorderStroke(1.dp, DarkCardBorder),
+                        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
                     ) {
-                        Column(modifier = Modifier.padding(12.dp)) {
+                        Column(modifier = Modifier.padding(14.dp)) {
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.SpaceBetween
@@ -198,6 +239,7 @@ private fun WorkerMyTasksTab(
                                     text = task.title,
                                     fontWeight = FontWeight.Bold,
                                     fontSize = 15.sp,
+                                    color = TextPrimary,
                                     modifier = Modifier.weight(1f)
                                 )
                                 Text(
@@ -205,31 +247,72 @@ private fun WorkerMyTasksTab(
                                     fontWeight = FontWeight.Bold,
                                     fontSize = 12.sp,
                                     color = when (task.status) {
-                                        "In uitvoering" -> Color(0xFF2980B9)
-                                        "Afgerond" -> Color(0xFF27AE60)
-                                        else -> Color(0xFFE67E22)
+                                        "In uitvoering" -> StatusInfo
+                                        "Afgerond" -> StatusSuccess
+                                        "Gepauzeerd" -> StatusWarning
+                                        else -> PrimaryBlueGlow
                                     }
                                 )
                             }
 
                             Spacer(modifier = Modifier.height(4.dp))
-                            Text(text = task.description, fontSize = 13.sp, color = Color.DarkGray)
+                            Text(text = task.description, fontSize = 13.sp, color = TextSecondary)
                             Spacer(modifier = Modifier.height(6.dp))
 
                             Text(
                                 text = "Klant: ${task.clientName} | Locatie: ${task.location}",
                                 fontSize = 12.sp,
-                                color = Color.Gray
+                                color = TextMuted
                             )
                             Text(
                                 text = "Datum: ${task.scheduledDate} | Geschat: ${task.estimatedHours}u | Gewerkt: ${task.actualHours}u",
                                 fontSize = 12.sp,
-                                color = Color.Gray
+                                color = TextMuted
                             )
 
                             Spacer(modifier = Modifier.height(8.dp))
-                            HorizontalDivider(color = Color(0xFFEEEEEE))
-                            Spacer(modifier = Modifier.height(6.dp))
+
+                            // Google Maps & Google Search 1-click Navigatie
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Button(
+                                    onClick = {
+                                        try {
+                                            val intent = viewModel.getGoogleMapsRouteIntent(task.location.ifBlank { "Nederland" })
+                                            context.startActivity(intent)
+                                        } catch (e: Exception) {
+                                            android.widget.Toast.makeText(context, "Maps openen mislukt", android.widget.Toast.LENGTH_SHORT).show()
+                                        }
+                                    },
+                                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF047857)),
+                                    contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Text("🗺️ Maps Route", fontSize = 11.sp, color = Color.White, fontWeight = FontWeight.Bold)
+                                }
+
+                                Button(
+                                    onClick = {
+                                        try {
+                                            val intent = viewModel.getGoogleSearchIntent("${task.title} ${task.location}")
+                                            context.startActivity(intent)
+                                        } catch (e: Exception) {
+                                            android.widget.Toast.makeText(context, "Search openen mislukt", android.widget.Toast.LENGTH_SHORT).show()
+                                        }
+                                    },
+                                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1D4ED8)),
+                                    contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Text("🔍 Search Info", fontSize = 11.sp, color = Color.White, fontWeight = FontWeight.Bold)
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.height(10.dp))
+                            HorizontalDivider(color = DarkCardBorder)
+                            Spacer(modifier = Modifier.height(8.dp))
 
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
@@ -240,23 +323,23 @@ private fun WorkerMyTasksTab(
                                     OutlinedButton(
                                         onClick = { onStatusChange(task.id, "In uitvoering") },
                                         contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp, vertical = 2.dp)
-                                    ) { Text("Start", fontSize = 11.sp) }
+                                    ) { Text("Start", fontSize = 11.sp, color = TextPrimary) }
                                     OutlinedButton(
                                         onClick = { onStatusChange(task.id, "Gepauzeerd") },
                                         contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp, vertical = 2.dp)
-                                    ) { Text("Pauze", fontSize = 11.sp) }
+                                    ) { Text("Pauze", fontSize = 11.sp, color = TextPrimary) }
                                     OutlinedButton(
                                         onClick = { onStatusChange(task.id, "Afgerond") },
                                         contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp, vertical = 2.dp)
-                                    ) { Text("Afronden", fontSize = 11.sp) }
+                                    ) { Text("Afronden", fontSize = 11.sp, color = TextPrimary) }
                                 }
 
                                 Button(
                                     onClick = { onLogHoursClick(task) },
-                                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0F4C81)),
-                                    contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+                                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0284C7)),
+                                    contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 10.dp, vertical = 4.dp)
                                 ) {
-                                    Text("+ Uren Boeken", fontSize = 11.sp)
+                                    Text("+ Uren Boeken", fontSize = 11.sp, color = Color.White, fontWeight = FontWeight.Bold)
                                 }
                             }
                         }
@@ -268,23 +351,21 @@ private fun WorkerMyTasksTab(
 }
 
 @Composable
-private fun WorkerAllTasksTab(tasks: List<PlanningTaskEntity>) {
+private fun WorkerAllTasksTab(
+    tasks: List<PlanningTaskEntity>
+) {
     Column(modifier = Modifier.fillMaxSize()) {
         Text(
-            text = "Algemeen Planningsoverzicht (${tasks.size})",
+            text = "Algemeen Planning Overzicht (${tasks.size})",
             fontWeight = FontWeight.Bold,
-            fontSize = 16.sp
-        )
-        Text(
-            text = "Overzicht van alle lopende projecten binnen het team",
-            fontSize = 12.sp,
-            color = Color.Gray
+            fontSize = 16.sp,
+            color = TextPrimary
         )
         Spacer(modifier = Modifier.height(8.dp))
 
         if (tasks.isEmpty()) {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text("Geen projecten aanwezig in de planning.", color = Color.Gray)
+                Text("Geen planningstaken gevonden.", color = TextMuted)
             }
         } else {
             LazyColumn(
@@ -294,19 +375,43 @@ private fun WorkerAllTasksTab(tasks: List<PlanningTaskEntity>) {
                 items(tasks, key = { it.id }) { task ->
                     Card(
                         modifier = Modifier.fillMaxWidth(),
-                        colors = CardDefaults.cardColors(containerColor = Color.White),
-                        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+                        colors = CardDefaults.cardColors(containerColor = DarkCardSurface),
+                        border = BorderStroke(1.dp, DarkCardBorder)
                     ) {
                         Column(modifier = Modifier.padding(12.dp)) {
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.SpaceBetween
                             ) {
-                                Text(text = task.title, fontWeight = FontWeight.Bold, fontSize = 14.sp)
-                                Text(text = task.status, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                                Text(
+                                    text = task.title,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 14.sp,
+                                    color = TextPrimary,
+                                    modifier = Modifier.weight(1f)
+                                )
+                                Text(
+                                    text = task.status,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 12.sp,
+                                    color = when (task.status) {
+                                        "In uitvoering" -> StatusInfo
+                                        "Afgerond" -> StatusSuccess
+                                        else -> StatusWarning
+                                    }
+                                )
                             }
-                            Text(text = "Werker: ${task.assignedWorkerName} | Klant: ${task.clientName}", fontSize = 12.sp, color = Color.Gray)
-                            Text(text = "Datum: ${task.scheduledDate}", fontSize = 12.sp, color = Color.Gray)
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(
+                                text = "Toegewezen aan: ${task.assignedWorkerName} | Klant: ${task.clientName}",
+                                fontSize = 12.sp,
+                                color = TextSecondary
+                            )
+                            Text(
+                                text = "Datum: ${task.scheduledDate} | Locatie: ${task.location}",
+                                fontSize = 11.sp,
+                                color = TextMuted
+                            )
                         }
                     }
                 }
@@ -322,15 +427,16 @@ private fun WorkerServiceRequestsTab(
 ) {
     Column(modifier = Modifier.fillMaxSize()) {
         Text(
-            text = "Ingekomen Klantaanvragen (${requests.size})",
+            text = "Ingediende Klantaanvragen (${requests.size})",
             fontWeight = FontWeight.Bold,
-            fontSize = 16.sp
+            fontSize = 16.sp,
+            color = TextPrimary
         )
         Spacer(modifier = Modifier.height(8.dp))
 
         if (requests.isEmpty()) {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text("Geen openstaande klantaanvragen.", color = Color.Gray)
+                Text("Geen openstaande serviceaanvragen.", color = TextMuted)
             }
         } else {
             LazyColumn(
@@ -340,32 +446,60 @@ private fun WorkerServiceRequestsTab(
                 items(requests, key = { it.id }) { req ->
                     Card(
                         modifier = Modifier.fillMaxWidth(),
-                        colors = CardDefaults.cardColors(containerColor = Color.White),
-                        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+                        colors = CardDefaults.cardColors(containerColor = DarkCardSurface),
+                        border = BorderStroke(1.dp, DarkCardBorder)
                     ) {
                         Column(modifier = Modifier.padding(12.dp)) {
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.SpaceBetween
                             ) {
-                                Text(text = req.title, fontWeight = FontWeight.Bold, fontSize = 14.sp)
-                                Text(text = req.status, fontWeight = FontWeight.Bold, fontSize = 12.sp, color = Color(0xFF2B5797))
+                                Text(
+                                    text = req.title,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 14.sp,
+                                    color = TextPrimary,
+                                    modifier = Modifier.weight(1f)
+                                )
+                                Text(
+                                    text = req.status,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 12.sp,
+                                    color = when (req.status) {
+                                        "In Behandeling" -> StatusInfo
+                                        "Voltooid" -> StatusSuccess
+                                        else -> StatusWarning
+                                    }
+                                )
                             }
-                            Text(text = req.description, fontSize = 13.sp, color = Color.DarkGray)
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(text = req.description, fontSize = 13.sp, color = TextSecondary)
                             Spacer(modifier = Modifier.height(4.dp))
-                            Text(text = "Klant: ${req.clientName} | Voorkeursdatum: ${req.preferredDate}", fontSize = 12.sp, color = Color.Gray)
+                            Text(
+                                text = "Klant: ${req.clientName} | Gewenste datum: ${req.preferredDate} | Urgentie: ${req.urgency}",
+                                fontSize = 11.sp,
+                                color = TextMuted
+                            )
 
+                            Spacer(modifier = Modifier.height(8.dp))
+                            HorizontalDivider(color = DarkCardBorder)
                             Spacer(modifier = Modifier.height(6.dp))
-                            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                OutlinedButton(
-                                    onClick = { onUpdateStatus(req.id, "In Planning") },
-                                    contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp, vertical = 2.dp)
-                                ) { Text("In Planning Nemen", fontSize = 11.sp) }
 
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.End,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
                                 OutlinedButton(
-                                    onClick = { onUpdateStatus(req.id, "Voltooid") },
+                                    onClick = { onUpdateStatus(req.id, "In Behandeling") },
                                     contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp, vertical = 2.dp)
-                                ) { Text("Afhandelen", fontSize = 11.sp) }
+                                ) { Text("In Behandeling", fontSize = 11.sp, color = TextPrimary) }
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Button(
+                                    onClick = { onUpdateStatus(req.id, "Voltooid") },
+                                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF16A34A)),
+                                    contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+                                ) { Text("Voltooid", fontSize = 11.sp, color = Color.White) }
                             }
                         }
                     }
@@ -381,16 +515,24 @@ private fun WorkerWorkLogsTab(
 ) {
     Column(modifier = Modifier.fillMaxSize()) {
         Text(
-            text = "Geboekte Uren (${logs.size})",
+            text = "Mijn Geregistreerde Werkuren (${logs.size})",
             fontWeight = FontWeight.Bold,
-            fontSize = 16.sp
+            fontSize = 16.sp,
+            color = TextPrimary
+        )
+        val total = logs.sumOf { it.hoursSpent }
+        Text(
+            text = "Totaal geboekt op dit account: $total uur",
+            fontSize = 13.sp,
+            color = WerkerPrimary,
+            fontWeight = FontWeight.SemiBold
         )
 
-        Spacer(modifier = Modifier.height(8.dp))
+        Spacer(modifier = Modifier.height(10.dp))
 
         if (logs.isEmpty()) {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text("Nog geen uren geboekt.", color = Color.Gray)
+                Text("Nog geen werkuren geboekt.", color = TextMuted)
             }
         } else {
             LazyColumn(
@@ -400,18 +542,29 @@ private fun WorkerWorkLogsTab(
                 items(logs, key = { it.id }) { log ->
                     Card(
                         modifier = Modifier.fillMaxWidth(),
-                        colors = CardDefaults.cardColors(containerColor = Color.White),
-                        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+                        colors = CardDefaults.cardColors(containerColor = DarkCardSurface),
+                        border = BorderStroke(1.dp, DarkCardBorder)
                     ) {
                         Column(modifier = Modifier.padding(10.dp)) {
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.SpaceBetween
                             ) {
-                                Text(text = log.taskTitle, fontWeight = FontWeight.Bold, fontSize = 13.sp)
-                                Text(text = "${log.hoursSpent} uur", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = Color(0xFF0F4C81))
+                                Text(
+                                    text = log.taskTitle,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 13.sp,
+                                    color = TextPrimary
+                                )
+                                Text(
+                                    text = "${log.hoursSpent} uur",
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 13.sp,
+                                    color = PrimaryBlueGlow
+                                )
                             }
-                            Text(text = log.activityDescription, fontSize = 12.sp, color = Color.DarkGray)
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(text = log.activityDescription, fontSize = 12.sp, color = TextSecondary)
                         }
                     }
                 }
@@ -426,43 +579,39 @@ private fun LogHoursDialog(
     onDismiss: () -> Unit,
     onConfirm: (Double, String) -> Unit
 ) {
-    var hoursText by remember { mutableStateOf("1.0") }
-    var descText by remember { mutableStateOf("") }
+    var hoursStr by remember { mutableStateOf("1.0") }
+    var activityDesc by remember { mutableStateOf("") }
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Uren Boeken: ${task.title}", fontWeight = FontWeight.Bold, fontSize = 15.sp) },
+        containerColor = DarkCardSurface,
+        title = { Text("Uren Boeken: ${task.title}", fontWeight = FontWeight.Bold, fontSize = 15.sp, color = TextPrimary) },
         text = {
-            Column(modifier = Modifier.fillMaxWidth()) {
-                OutlinedTextField(
-                    value = hoursText,
-                    onValueChange = { hoursText = it },
-                    label = { Text("Aantal uren (bijv. 2.0)") },
-                    modifier = Modifier.fillMaxWidth()
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                OutlinedTextField(
-                    value = descText,
-                    onValueChange = { descText = it },
-                    label = { Text("Werkbeschrijving") },
-                    modifier = Modifier.fillMaxWidth()
-                )
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
+            ) {
+                DarkTextField(value = hoursStr, onValueChange = { hoursStr = it }, label = "Aantal uren gewerkt (bijv. 2.5)")
+                Spacer(modifier = Modifier.height(6.dp))
+                DarkTextField(value = activityDesc, onValueChange = { activityDesc = it }, label = "Uitgevoerde werkzaamheden")
             }
         },
         confirmButton = {
             Button(
                 onClick = {
-                    val h = hoursText.toDoubleOrNull() ?: 1.0
-                    if (descText.isNotBlank()) {
-                        onConfirm(h, descText)
+                    val hours = hoursStr.toDoubleOrNull() ?: 1.0
+                    if (activityDesc.isNotBlank()) {
+                        onConfirm(hours, activityDesc.trim())
                     }
-                }
+                },
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0284C7))
             ) {
-                Text("Boeken")
+                Text("Boeken", color = Color.White)
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Annuleren") }
+            TextButton(onClick = onDismiss) { Text("Annuleren", color = TextSecondary) }
         }
     )
 }

@@ -43,6 +43,7 @@ fun AccessDeniedDialog(
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
+        containerColor = com.example.ui.theme.DarkCardSurface,
         title = {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Box(

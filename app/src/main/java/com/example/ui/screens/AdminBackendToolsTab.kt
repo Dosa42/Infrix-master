@@ -5,6 +5,7 @@ import android.content.Intent
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -16,13 +17,10 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CameraAlt
-import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.CloudUpload
 import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.LocationOn
@@ -31,7 +29,6 @@ import androidx.compose.material.icons.filled.Navigation
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Phone
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -42,6 +39,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -62,6 +60,21 @@ import com.example.data.backend.CloudSyncStatus
 import com.example.data.backend.DevicePermissionStatus
 import com.example.data.backend.GeoLocationData
 import com.example.data.backend.SearchResultItem
+import com.example.ui.theme.AdminPrimary
+import com.example.ui.theme.DarkAppBackground
+import com.example.ui.theme.DarkCardBorder
+import com.example.ui.theme.DarkCardSurface
+import com.example.ui.theme.DarkCardSurfaceVariant
+import com.example.ui.theme.KlantPrimary
+import com.example.ui.theme.PrimaryBlueGlow
+import com.example.ui.theme.StatusDanger
+import com.example.ui.theme.StatusInfo
+import com.example.ui.theme.StatusSuccess
+import com.example.ui.theme.StatusWarning
+import com.example.ui.theme.TextMuted
+import com.example.ui.theme.TextPrimary
+import com.example.ui.theme.TextSecondary
+import com.example.ui.theme.WerkerPrimary
 import com.example.ui.viewmodel.DashboardViewModel
 
 @Composable
@@ -121,7 +134,8 @@ fun AdminBackendToolsTab(
         // -------------------------------------------------------------
         Card(
             modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(containerColor = Color.White),
+            colors = CardDefaults.cardColors(containerColor = DarkCardSurface),
+            border = BorderStroke(1.dp, DarkCardBorder),
             elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
         ) {
             Column(modifier = Modifier.padding(14.dp)) {
@@ -130,17 +144,17 @@ fun AdminBackendToolsTab(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Column {
+                    Column(modifier = Modifier.weight(1f)) {
                         Text(
                             text = "1. Device & Android Permissions Hub",
                             fontSize = 15.sp,
                             fontWeight = FontWeight.Bold,
-                            color = Color(0xFF1E293B)
+                            color = TextPrimary
                         )
                         Text(
                             text = "Camera, Microfoon, GPS/Locatie, Telefoon & Meldingen",
                             fontSize = 12.sp,
-                            color = Color.Gray
+                            color = TextMuted
                         )
                     }
                     Button(
@@ -159,18 +173,18 @@ fun AdminBackendToolsTab(
                         },
                         colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2563EB))
                     ) {
-                        Text("Vraag Alle Toestemmingen", fontSize = 11.sp)
+                        Text("Vraag Alle Toestemmingen", fontSize = 11.sp, color = Color.White)
                     }
                 }
 
-                Spacer(modifier = Modifier.height(10.dp))
+                Spacer(modifier = Modifier.height(12.dp))
 
                 // Permissions List Display
                 permissionsList.forEach { p ->
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(vertical = 3.dp),
+                            .padding(vertical = 4.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Icon(
@@ -182,25 +196,25 @@ fun AdminBackendToolsTab(
                                 else -> Icons.Default.Phone
                             },
                             contentDescription = null,
-                            tint = if (p.isGranted) Color(0xFF27AE60) else Color(0xFFE67E22),
-                            modifier = Modifier.padding(end = 8.dp)
+                            tint = if (p.isGranted) StatusSuccess else StatusWarning,
+                            modifier = Modifier.padding(end = 10.dp)
                         )
                         Column(modifier = Modifier.weight(1f)) {
-                            Text(text = p.title, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-                            Text(text = p.description, fontSize = 10.sp, color = Color.Gray)
+                            Text(text = p.title, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = TextPrimary)
+                            Text(text = p.description, fontSize = 11.sp, color = TextMuted)
                         }
                         Text(
                             text = if (p.isGranted) "Toegekend" else "Vereist actie",
                             fontSize = 11.sp,
                             fontWeight = FontWeight.Bold,
-                            color = if (p.isGranted) Color(0xFF27AE60) else Color(0xFFC0392B)
+                            color = if (p.isGranted) StatusSuccess else StatusDanger
                         )
                     }
                 }
 
-                Spacer(modifier = Modifier.height(8.dp))
-                HorizontalDivider(color = Color(0xFFEEEEEE))
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(10.dp))
+                HorizontalDivider(color = DarkCardBorder)
+                Spacer(modifier = Modifier.height(10.dp))
 
                 // Live Location Box
                 Row(
@@ -208,20 +222,20 @@ fun AdminBackendToolsTab(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Column {
-                        Text(text = "Huidige GPS Telemetrie:", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(text = "Huidige GPS Telemetrie:", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = TextPrimary)
                         val loc = currentLocation
                         if (loc != null) {
                             Text(
                                 text = "Lat: ${loc.latitude} | Lon: ${loc.longitude} (${loc.provider})",
-                                fontSize = 11.sp,
-                                color = Color.DarkGray
+                                fontSize = 12.sp,
+                                color = TextSecondary
                             )
                             loc.readableAddress?.let { addr ->
-                                Text(text = "Adres: $addr", fontSize = 11.sp, color = Color(0xFF0F4C81), fontWeight = FontWeight.Medium)
+                                Text(text = "Adres: $addr", fontSize = 12.sp, color = WerkerPrimary, fontWeight = FontWeight.Medium)
                             }
                         } else {
-                            Text(text = "Locatie wordt opgehaald of toestemming vereist.", fontSize = 11.sp, color = Color.Gray)
+                            Text(text = "Locatie wordt opgehaald of toestemming vereist.", fontSize = 12.sp, color = TextMuted)
                         }
                     }
                     OutlinedButton(
@@ -229,9 +243,9 @@ fun AdminBackendToolsTab(
                             currentLocation = viewModel.getDeviceGpsLocation()
                             permissionsList = viewModel.getHardwarePermissionsStatus()
                         },
-                        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+                        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 10.dp, vertical = 4.dp)
                     ) {
-                        Text("Ververs GPS", fontSize = 11.sp)
+                        Text("Ververs GPS", fontSize = 11.sp, color = TextPrimary)
                     }
                 }
             }
@@ -242,37 +256,36 @@ fun AdminBackendToolsTab(
         // -------------------------------------------------------------
         Card(
             modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(containerColor = Color.White),
+            colors = CardDefaults.cardColors(containerColor = DarkCardSurface),
+            border = BorderStroke(1.dp, DarkCardBorder),
             elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
         ) {
             Column(modifier = Modifier.padding(14.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(imageVector = Icons.Default.Navigation, contentDescription = null, tint = Color(0xFFEA4335))
+                    Icon(imageVector = Icons.Default.Navigation, contentDescription = null, tint = Color(0xFFF87171))
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
                         text = "2. Google Maps & Navigatie Integratie",
                         fontSize = 15.sp,
                         fontWeight = FontWeight.Bold,
-                        color = Color(0xFF1E293B)
+                        color = TextPrimary
                     )
                 }
                 Text(
                     text = "Start Google Maps navigatie, bekijk werklocaties en bereken afstanden",
                     fontSize = 12.sp,
-                    color = Color.Gray
+                    color = TextMuted
                 )
 
                 Spacer(modifier = Modifier.height(10.dp))
 
-                OutlinedTextField(
+                DarkTextField(
                     value = mapDestination,
                     onValueChange = { mapDestination = it },
-                    label = { Text("Bestemming (Adres, Klantlocatie of Coördinaten)") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
+                    label = "Bestemming (Adres, Klantlocatie of Coördinaten)"
                 )
 
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(10.dp))
 
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -283,55 +296,32 @@ fun AdminBackendToolsTab(
                         colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFEA4335)),
                         modifier = Modifier.weight(1f)
                     ) {
-                        Text("Start Navigatie", fontSize = 12.sp)
+                        Text("Start Navigatie", fontSize = 12.sp, color = Color.White, fontWeight = FontWeight.Bold)
                     }
                     OutlinedButton(
                         onClick = { viewModel.showMapLocation(mapDestination) },
                         modifier = Modifier.weight(1f)
                     ) {
-                        Text("Toon op Kaart", fontSize = 12.sp)
+                        Text("Toon op Kaart", fontSize = 12.sp, color = TextPrimary)
                     }
                 }
 
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(12.dp))
 
                 // Coordinate Distance Calculator
-                Text(text = "Coördinaten Afstandscalculator:", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                Text(text = "Coördinaten Afstandscalculator:", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
+                Spacer(modifier = Modifier.height(4.dp))
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    OutlinedTextField(
-                        value = routeOriginLat,
-                        onValueChange = { routeOriginLat = it },
-                        label = { Text("Start Lat") },
-                        modifier = Modifier.weight(1f),
-                        singleLine = true
-                    )
-                    OutlinedTextField(
-                        value = routeOriginLon,
-                        onValueChange = { routeOriginLon = it },
-                        label = { Text("Start Lon") },
-                        modifier = Modifier.weight(1f),
-                        singleLine = true
-                    )
-                    OutlinedTextField(
-                        value = routeDestLat,
-                        onValueChange = { routeDestLat = it },
-                        label = { Text("Doel Lat") },
-                        modifier = Modifier.weight(1f),
-                        singleLine = true
-                    )
-                    OutlinedTextField(
-                        value = routeDestLon,
-                        onValueChange = { routeDestLon = it },
-                        label = { Text("Doel Lon") },
-                        modifier = Modifier.weight(1f),
-                        singleLine = true
-                    )
+                    DarkTextField(value = routeOriginLat, onValueChange = { routeOriginLat = it }, label = "Start Lat", modifier = Modifier.weight(1f))
+                    DarkTextField(value = routeOriginLon, onValueChange = { routeOriginLon = it }, label = "Start Lon", modifier = Modifier.weight(1f))
+                    DarkTextField(value = routeDestLat, onValueChange = { routeDestLat = it }, label = "Doel Lat", modifier = Modifier.weight(1f))
+                    DarkTextField(value = routeDestLon, onValueChange = { routeDestLon = it }, label = "Doel Lon", modifier = Modifier.weight(1f))
                 }
 
-                Spacer(modifier = Modifier.height(6.dp))
+                Spacer(modifier = Modifier.height(8.dp))
 
                 Button(
                     onClick = {
@@ -342,15 +332,15 @@ fun AdminBackendToolsTab(
                         val res = viewModel.calculateGpsDistance(lat1, lon1, lat2, lon2)
                         calculatedRouteInfo = "Hemelsbrede afstand: ${res.directDistanceKm} km | Geschatte reistijd: ~${res.estimatedDriveMinutes} min"
                     },
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1E293B)),
+                    colors = ButtonDefaults.buttonColors(containerColor = DarkCardSurfaceVariant),
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Text("Bereken Afstand & Reistijd", fontSize = 12.sp)
+                    Text("Bereken Afstand & Reistijd", fontSize = 12.sp, color = TextPrimary)
                 }
 
                 calculatedRouteInfo?.let { info ->
-                    Spacer(modifier = Modifier.height(6.dp))
-                    Text(text = info, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFF27AE60))
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(text = info, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = StatusSuccess)
                 }
             }
         }
@@ -360,30 +350,32 @@ fun AdminBackendToolsTab(
         // -------------------------------------------------------------
         Card(
             modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(containerColor = Color.White),
+            colors = CardDefaults.cardColors(containerColor = DarkCardSurface),
+            border = BorderStroke(1.dp, DarkCardBorder),
             elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
         ) {
             Column(modifier = Modifier.padding(14.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(imageVector = Icons.Default.Email, contentDescription = null, tint = Color(0xFF2B5797))
+                    Icon(imageVector = Icons.Default.Email, contentDescription = null, tint = PrimaryBlueGlow)
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
                         text = "3. E-mail Backend & Notificatie Dispatcher",
                         fontSize = 15.sp,
                         fontWeight = FontWeight.Bold,
-                        color = Color(0xFF1E293B)
+                        color = TextPrimary
                     )
                 }
                 Text(
                     text = "Systeemnotificaties, accountgegevens en planningen per e-mail versturen",
                     fontSize = 12.sp,
-                    color = Color.Gray
+                    color = TextMuted
                 )
 
                 Spacer(modifier = Modifier.height(10.dp))
 
                 // Snelle Templates
-                Text(text = "Snel sjabloon laden:", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                Text(text = "Snel sjabloon laden:", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
+                Spacer(modifier = Modifier.height(4.dp))
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(6.dp)
@@ -396,7 +388,7 @@ fun AdminBackendToolsTab(
                         },
                         contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 6.dp, vertical = 2.dp),
                         modifier = Modifier.weight(1f)
-                    ) { Text("Account Template", fontSize = 10.sp) }
+                    ) { Text("Account Template", fontSize = 11.sp, color = TextPrimary) }
 
                     OutlinedButton(
                         onClick = {
@@ -406,51 +398,47 @@ fun AdminBackendToolsTab(
                         },
                         contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 6.dp, vertical = 2.dp),
                         modifier = Modifier.weight(1f)
-                    ) { Text("Taak Template", fontSize = 10.sp) }
+                    ) { Text("Taak Template", fontSize = 11.sp, color = TextPrimary) }
                 }
 
                 Spacer(modifier = Modifier.height(8.dp))
 
-                OutlinedTextField(
-                    value = emailRecipient,
-                    onValueChange = { emailRecipient = it },
-                    label = { Text("Ontvanger E-mailadres") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
+                DarkTextField(value = emailRecipient, onValueChange = { emailRecipient = it }, label = "Ontvanger E-mailadres")
                 Spacer(modifier = Modifier.height(6.dp))
-                OutlinedTextField(
-                    value = emailSubject,
-                    onValueChange = { emailSubject = it },
-                    label = { Text("Onderwerp") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
+                DarkTextField(value = emailSubject, onValueChange = { emailSubject = it }, label = "Onderwerp")
                 Spacer(modifier = Modifier.height(6.dp))
                 OutlinedTextField(
                     value = emailBody,
                     onValueChange = { emailBody = it },
-                    label = { Text("Inhoud / Body") },
+                    label = { Text("Inhoud / Body", color = TextMuted) },
                     modifier = Modifier.fillMaxWidth(),
-                    minLines = 3
+                    minLines = 3,
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedTextColor = TextPrimary,
+                        unfocusedTextColor = TextPrimary,
+                        focusedBorderColor = PrimaryBlueGlow,
+                        unfocusedBorderColor = DarkCardBorder,
+                        focusedContainerColor = DarkAppBackground,
+                        unfocusedContainerColor = DarkAppBackground
+                    )
                 )
 
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(10.dp))
 
                 Button(
                     onClick = {
                         val res = viewModel.sendNativeEmail(emailRecipient, emailSubject, emailBody)
                         emailStatusMsg = if (res.isSuccess) "E-mail verzendopdracht succesvol aangeboden aan mailclient." else res.message
                     },
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2B5797)),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2563EB)),
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Text("Verstuur Systeem E-mail", fontSize = 13.sp)
+                    Text("Verstuur Systeem E-mail", fontSize = 13.sp, color = Color.White, fontWeight = FontWeight.Bold)
                 }
 
                 emailStatusMsg?.let { msg ->
                     Spacer(modifier = Modifier.height(6.dp))
-                    Text(text = msg, fontSize = 12.sp, color = Color(0xFF27AE60), fontWeight = FontWeight.Medium)
+                    Text(text = msg, fontSize = 12.sp, color = StatusSuccess, fontWeight = FontWeight.Medium)
                 }
             }
         }
@@ -460,37 +448,32 @@ fun AdminBackendToolsTab(
         // -------------------------------------------------------------
         Card(
             modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(containerColor = Color.White),
+            colors = CardDefaults.cardColors(containerColor = DarkCardSurface),
+            border = BorderStroke(1.dp, DarkCardBorder),
             elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
         ) {
             Column(modifier = Modifier.padding(14.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(imageVector = Icons.Default.Search, contentDescription = null, tint = Color(0xFF0F9D58))
+                    Icon(imageVector = Icons.Default.Search, contentDescription = null, tint = StatusSuccess)
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
                         text = "4. Google & Web Search Integratie",
                         fontSize = 15.sp,
                         fontWeight = FontWeight.Bold,
-                        color = Color(0xFF1E293B)
+                        color = TextPrimary
                     )
                 }
                 Text(
                     text = "Live zoekfunctie en documentatie opzoeken voor monteurs en beheerders",
                     fontSize = 12.sp,
-                    color = Color.Gray
+                    color = TextMuted
                 )
 
                 Spacer(modifier = Modifier.height(10.dp))
 
-                OutlinedTextField(
-                    value = searchQuery,
-                    onValueChange = { searchQuery = it },
-                    label = { Text("Zoekopdracht (Google / Kennisbank)") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
+                DarkTextField(value = searchQuery, onValueChange = { searchQuery = it }, label = "Zoekopdracht (Google / Kennisbank)")
 
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(10.dp))
 
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -504,13 +487,13 @@ fun AdminBackendToolsTab(
                                 searchResults = results
                             }
                         },
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0F9D58)),
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF059669)),
                         modifier = Modifier.weight(1f)
                     ) {
                         if (isSearching) {
                             CircularProgressIndicator(modifier = Modifier.height(16.dp).width(16.dp), color = Color.White)
                         } else {
-                            Text("In-App Zoeken", fontSize = 12.sp)
+                            Text("In-App Zoeken", fontSize = 12.sp, color = Color.White, fontWeight = FontWeight.Bold)
                         }
                     }
 
@@ -518,14 +501,14 @@ fun AdminBackendToolsTab(
                         onClick = { viewModel.launchGoogleSearch(searchQuery) },
                         modifier = Modifier.weight(1f)
                     ) {
-                        Text("Google Direct", fontSize = 12.sp)
+                        Text("Google Direct", fontSize = 12.sp, color = TextPrimary)
                     }
                 }
 
                 // Results list
                 if (searchResults.isNotEmpty()) {
-                    Spacer(modifier = Modifier.height(10.dp))
-                    Text(text = "Gevonden Resultaten (${searchResults.size}):", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text(text = "Gevonden Resultaten (${searchResults.size}):", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
                     Spacer(modifier = Modifier.height(4.dp))
 
                     searchResults.forEach { item ->
@@ -533,18 +516,19 @@ fun AdminBackendToolsTab(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .padding(vertical = 3.dp),
-                            colors = CardDefaults.cardColors(containerColor = Color(0xFFF8FAFC))
+                            colors = CardDefaults.cardColors(containerColor = DarkCardSurfaceVariant),
+                            border = BorderStroke(1.dp, DarkCardBorder)
                         ) {
-                            Column(modifier = Modifier.padding(8.dp)) {
-                                Text(text = item.title, fontWeight = FontWeight.Bold, fontSize = 12.sp, color = Color(0xFF1E293B))
-                                Text(text = item.snippet, fontSize = 11.sp, color = Color.DarkGray)
-                                Spacer(modifier = Modifier.height(2.dp))
+                            Column(modifier = Modifier.padding(10.dp)) {
+                                Text(text = item.title, fontWeight = FontWeight.Bold, fontSize = 13.sp, color = TextPrimary)
+                                Text(text = item.snippet, fontSize = 12.sp, color = TextSecondary)
+                                Spacer(modifier = Modifier.height(4.dp))
                                 Row(
                                     modifier = Modifier.fillMaxWidth(),
                                     horizontalArrangement = Arrangement.SpaceBetween,
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    Text(text = "Bron: ${item.source}", fontSize = 10.sp, color = Color.Gray)
+                                    Text(text = "Bron: ${item.source}", fontSize = 11.sp, color = TextMuted)
                                     TextButton(
                                         onClick = {
                                             val browserIntent = Intent(Intent.ACTION_VIEW, Uri.parse(item.url)).apply {
@@ -552,9 +536,9 @@ fun AdminBackendToolsTab(
                                             }
                                             context.startActivity(browserIntent)
                                         },
-                                        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 4.dp, vertical = 0.dp)
+                                        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 6.dp, vertical = 0.dp)
                                     ) {
-                                        Text("Open Link", fontSize = 11.sp, color = Color(0xFF2563EB))
+                                        Text("Open Link", fontSize = 12.sp, color = PrimaryBlueGlow, fontWeight = FontWeight.Bold)
                                     }
                                 }
                             }
@@ -569,37 +553,32 @@ fun AdminBackendToolsTab(
         // -------------------------------------------------------------
         Card(
             modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(containerColor = Color.White),
+            colors = CardDefaults.cardColors(containerColor = DarkCardSurface),
+            border = BorderStroke(1.dp, DarkCardBorder),
             elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
         ) {
             Column(modifier = Modifier.padding(14.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(imageVector = Icons.Default.CloudUpload, contentDescription = null, tint = Color(0xFF7C3AED))
+                    Icon(imageVector = Icons.Default.CloudUpload, contentDescription = null, tint = AdminPrimary)
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
                         text = "5. Server Side Storage & Cloud Sync",
                         fontSize = 15.sp,
                         fontWeight = FontWeight.Bold,
-                        color = Color(0xFF1E293B)
+                        color = TextPrimary
                     )
                 }
                 Text(
                     text = "Complete database back-up, server synchronisatie en JSON exports",
                     fontSize = 12.sp,
-                    color = Color.Gray
+                    color = TextMuted
                 )
 
                 Spacer(modifier = Modifier.height(10.dp))
 
-                OutlinedTextField(
-                    value = serverEndpoint,
-                    onValueChange = { serverEndpoint = it },
-                    label = { Text("Server Synchronisatie Endpoint") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
+                DarkTextField(value = serverEndpoint, onValueChange = { serverEndpoint = it }, label = "Server Synchronisatie Endpoint")
 
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(10.dp))
 
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -619,7 +598,7 @@ fun AdminBackendToolsTab(
                         if (isSyncing) {
                             CircularProgressIndicator(modifier = Modifier.height(16.dp).width(16.dp), color = Color.White)
                         } else {
-                            Text("Start Cloud Sync", fontSize = 12.sp)
+                            Text("Start Cloud Sync", fontSize = 12.sp, color = Color.White, fontWeight = FontWeight.Bold)
                         }
                     }
 
@@ -631,21 +610,65 @@ fun AdminBackendToolsTab(
                         },
                         modifier = Modifier.weight(1f)
                     ) {
-                        Text("Export JSON Dump", fontSize = 12.sp)
+                        Text("Export JSON Dump", fontSize = 12.sp, color = TextPrimary)
                     }
                 }
 
                 cloudSyncStatus?.let { status ->
-                    Spacer(modifier = Modifier.height(8.dp))
+                    Spacer(modifier = Modifier.height(10.dp))
                     Card(
                         modifier = Modifier.fillMaxWidth(),
-                        colors = CardDefaults.cardColors(containerColor = Color(0xFFF0FDF4))
+                        colors = CardDefaults.cardColors(containerColor = DarkCardSurfaceVariant),
+                        border = BorderStroke(1.dp, DarkCardBorder)
                     ) {
-                        Column(modifier = Modifier.padding(8.dp)) {
-                            Text(text = "Status: ${status.syncState}", fontWeight = FontWeight.Bold, fontSize = 12.sp, color = Color(0xFF15803D))
-                            Text(text = "Dataomvang: ${status.backupPayloadSizeKb} KB | Endpoint: ${status.serverEndpoint}", fontSize = 11.sp, color = Color.DarkGray)
+                        Column(modifier = Modifier.padding(10.dp)) {
+                            Text(text = "Status: ${status.syncState}", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = StatusSuccess)
+                            Text(text = "Dataomvang: ${status.backupPayloadSizeKb} KB | Endpoint: ${status.serverEndpoint}", fontSize = 12.sp, color = TextSecondary)
                         }
                     }
+                }
+            }
+        }
+
+        // -------------------------------------------------------------
+        // 6. BACKEND AGENDA & DEFAULT KALENDER SYNCHRONISATIE ENGINE
+        // -------------------------------------------------------------
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = DarkCardSurface),
+            border = BorderStroke(1.dp, PrimaryBlueGlow.copy(alpha = 0.5f)),
+            elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+        ) {
+            Column(modifier = Modifier.padding(14.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(text = "📅", fontSize = 18.sp)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "6. Backend Agenda & Default Kalender Sync",
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = TextPrimary
+                    )
+                }
+                Text(
+                    text = "Google Search, Google Maps, Werkers en Klanten zijn default verbonden en realtime synchroon met de centrale agenda.",
+                    fontSize = 12.sp,
+                    color = TextMuted,
+                    modifier = Modifier.padding(top = 2.dp)
+                )
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                Button(
+                    onClick = {
+                        viewModel.syncAllToCalendar { count ->
+                            android.widget.Toast.makeText(context, "✅ Gesynchroniseerd: $count items met werkers, klanten, Maps & Search!", android.widget.Toast.LENGTH_SHORT).show()
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = PrimaryBlueGlow),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("⚡ Voer Nu Volledige Kalender Synchronisatie Uit", fontSize = 12.sp, color = Color.White, fontWeight = FontWeight.Bold)
                 }
             }
         }
@@ -657,24 +680,29 @@ fun AdminBackendToolsTab(
     rawJsonDump?.let { json ->
         AlertDialog(
             onDismissRequest = { rawJsonDump = null },
-            title = { Text("Database JSON Backup Payload", fontWeight = FontWeight.Bold, fontSize = 15.sp) },
+            containerColor = DarkCardSurface,
+            title = { Text("Database JSON Backup Payload", fontWeight = FontWeight.Bold, fontSize = 15.sp, color = TextPrimary) },
             text = {
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(300.dp)
+                        .height(320.dp)
+                        .background(DarkAppBackground)
+                        .padding(8.dp)
                         .verticalScroll(rememberScrollState())
                 ) {
                     Text(
                         text = json,
-                        fontSize = 10.sp,
+                        fontSize = 11.sp,
                         fontFamily = FontFamily.Monospace,
-                        color = Color(0xFF1E293B)
+                        color = PrimaryBlueGlow
                     )
                 }
             },
             confirmButton = {
-                Button(onClick = { rawJsonDump = null }) { Text("Sluiten") }
+                Button(onClick = { rawJsonDump = null }, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2563EB))) {
+                    Text("Sluiten", color = Color.White)
+                }
             }
         )
     }
