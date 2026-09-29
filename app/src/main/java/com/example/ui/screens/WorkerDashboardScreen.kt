@@ -2,6 +2,7 @@ package com.example.ui.screens
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -11,18 +12,23 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
 import androidx.compose.material3.TabRowDefaults
@@ -50,6 +56,8 @@ import com.example.ui.theme.DarkAppBackground
 import com.example.ui.theme.DarkCardBorder
 import com.example.ui.theme.DarkCardSurface
 import com.example.ui.theme.DarkCardSurfaceVariant
+import com.example.ui.theme.DarkTextField
+import com.example.ui.theme.DarkTextFieldBorder
 import com.example.ui.theme.PrimaryBlueGlow
 import com.example.ui.theme.StatusDanger
 import com.example.ui.theme.StatusInfo
@@ -74,7 +82,7 @@ fun WorkerDashboardScreen(
     val securityAlert by viewModel.securityAlert.collectAsState()
 
     var selectedTab by remember { mutableIntStateOf(0) }
-    val tabs = listOf("Mijn Planning (${myTasks.size})", "Algemene Planning", "Klantverzoeken", "Urenregistratie")
+    val tabs = listOf("Mijn Planning (${myTasks.size})", "Werker AI Co-Pilot", "Algemene Planning", "Klantverzoeken", "Urenregistratie")
 
     var selectedTaskForLog by remember { mutableStateOf<PlanningTaskEntity?>(null) }
 
@@ -168,12 +176,15 @@ fun WorkerDashboardScreen(
                     onStatusChange = { taskId, status -> viewModel.updateTaskStatus(taskId, status) },
                     onLogHoursClick = { task -> selectedTaskForLog = task }
                 )
-                1 -> WorkerAllTasksTab(tasks = allTasks)
-                2 -> WorkerServiceRequestsTab(
+                1 -> WorkerAICoPilotTab(
+                    viewModel = viewModel
+                )
+                2 -> WorkerAllTasksTab(tasks = allTasks)
+                3 -> WorkerServiceRequestsTab(
                     requests = allServiceRequests,
                     onUpdateStatus = { reqId, status -> viewModel.updateRequestStatus(reqId, status) }
                 )
-                3 -> WorkerWorkLogsTab(logs = myLogs)
+                4 -> WorkerWorkLogsTab(logs = myLogs)
             }
         }
     }
@@ -615,3 +626,247 @@ private fun LogHoursDialog(
         }
     )
 }
+
+@Composable
+private fun WorkerAICoPilotTab(
+    viewModel: DashboardViewModel
+) {
+    val session by viewModel.chatGPTSession.collectAsState()
+    val chatMessages = remember { androidx.compose.runtime.mutableStateListOf<com.example.data.auth.ChatMessage>() }
+    var promptInput by remember { mutableStateOf("") }
+    var isStreaming by remember { mutableStateOf(false) }
+    var streamStatusText by remember { mutableStateOf("") }
+
+    val listState = androidx.compose.foundation.lazy.rememberLazyListState()
+
+    androidx.compose.runtime.LaunchedEffect(chatMessages.size) {
+        if (chatMessages.isNotEmpty()) {
+            listState.animateScrollToItem(chatMessages.size - 1)
+        }
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(DarkAppBackground)
+    ) {
+        // Banner
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = DarkCardSurface),
+            border = BorderStroke(1.dp, WerkerPrimary.copy(alpha = 0.5f)),
+            shape = RoundedCornerShape(12.dp)
+        ) {
+            Column(modifier = Modifier.padding(14.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column {
+                        Text(
+                            text = "🛠️ Werker AI Co-Pilot (Harnas 2)",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 16.sp,
+                            color = TextPrimary
+                        )
+                        Text(
+                            text = "Deterministische ondersteuning voor werkorders, NEN-veiligheid, materiaaladvies en probleemoplossing.",
+                            fontSize = 12.sp,
+                            color = TextSecondary
+                        )
+                    }
+
+                    if (session?.isValid == true) {
+                        Box(
+                            modifier = Modifier
+                                .background(StatusSuccess.copy(alpha = 0.2f), RoundedCornerShape(6.dp))
+                                .border(1.dp, StatusSuccess, RoundedCornerShape(6.dp))
+                                .padding(horizontal = 8.dp, vertical = 4.dp)
+                        ) {
+                            Text("● Actief", color = StatusSuccess, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        }
+                    } else {
+                        Box(
+                            modifier = Modifier
+                                .background(StatusDanger.copy(alpha = 0.2f), RoundedCornerShape(6.dp))
+                                .border(1.dp, StatusDanger, RoundedCornerShape(6.dp))
+                                .padding(horizontal = 8.dp, vertical = 4.dp)
+                        ) {
+                            Text("● Geen Token", color = StatusDanger, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(10.dp))
+
+        // Chat messages list
+        LazyColumn(
+            state = listState,
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            if (chatMessages.isEmpty()) {
+                item {
+                    Card(
+                        colors = CardDefaults.cardColors(containerColor = DarkCardSurface),
+                        border = BorderStroke(1.dp, DarkCardBorder),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(20.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Text(
+                                text = "Vraag uw AI Co-Pilot om technische hulp:\n• 'Wat is het aansluitschema voor NEN 1010?'\n• 'Hoe los ik foutcode E-04 op bij een omvormer?'\n• 'Wat zijn de veiligheidsstappen voor mijn huidige taak?'",
+                                color = TextSecondary,
+                                fontSize = 13.sp,
+                                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                                lineHeight = 18.sp
+                            )
+                        }
+                    }
+                }
+            }
+
+            items(chatMessages, key = { it.id }) { msg ->
+                val isUser = msg.role == "user"
+                val align = if (isUser) Alignment.End else Alignment.Start
+                val bg = if (isUser) Color(0xFF0369A1) else DarkCardSurfaceVariant
+                val borderColor = if (isUser) WerkerPrimary else DarkCardBorder
+
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 4.dp),
+                    horizontalAlignment = align
+                ) {
+                    Card(
+                        colors = CardDefaults.cardColors(containerColor = bg),
+                        border = BorderStroke(1.dp, borderColor),
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.fillMaxWidth(0.92f)
+                    ) {
+                        Column(modifier = Modifier.padding(12.dp)) {
+                            Text(
+                                text = if (isUser) "U (Monteur)" else "Werker Co-Pilot",
+                                color = if (isUser) WerkerPrimary else Color(0xFF67E8F9),
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 11.sp
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = msg.text.ifBlank { "..." },
+                                color = TextPrimary,
+                                fontSize = 13.sp,
+                                lineHeight = 18.sp
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        if (isStreaming) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 4.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                CircularProgressIndicator(modifier = Modifier.size(14.dp), color = WerkerPrimary)
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(text = streamStatusText.ifBlank { "Co-Pilot denkt na..." }, color = WerkerPrimary, fontSize = 11.sp)
+            }
+            Spacer(modifier = Modifier.height(4.dp))
+        }
+
+        // Input
+        Card(
+            colors = CardDefaults.cardColors(containerColor = DarkCardSurface),
+            border = BorderStroke(1.dp, DarkCardBorder),
+            shape = RoundedCornerShape(12.dp),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                OutlinedTextField(
+                    value = promptInput,
+                    onValueChange = { promptInput = it },
+                    placeholder = { Text("Vraag aan Werker Co-Pilot...", color = TextMuted, fontSize = 13.sp) },
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedTextColor = TextPrimary,
+                        unfocusedTextColor = TextPrimary,
+                        focusedBorderColor = WerkerPrimary,
+                        unfocusedBorderColor = DarkTextFieldBorder,
+                        focusedContainerColor = DarkTextField,
+                        unfocusedContainerColor = DarkTextField
+                    ),
+                    modifier = Modifier.weight(1f)
+                )
+
+                Button(
+                    onClick = {
+                        if (promptInput.isNotBlank() && !isStreaming) {
+                            val userText = promptInput
+                            promptInput = ""
+                            val userMsg = com.example.data.auth.ChatMessage(role = "user", text = userText)
+                            chatMessages.add(userMsg)
+
+                            val assistantMsgId = java.util.UUID.randomUUID().toString()
+                            chatMessages.add(com.example.data.auth.ChatMessage(id = assistantMsgId, role = "assistant", text = ""))
+
+                            isStreaming = true
+                            streamStatusText = "Co-Pilot raadplegen..."
+
+                            viewModel.sendHarnessPrompt(
+                                category = com.example.data.ai.AIHarnessCategory.WERKER,
+                                messages = chatMessages.dropLast(1),
+                                userPrompt = userText,
+                                onChunk = { chunk ->
+                                    val idx = chatMessages.indexOfFirst { it.id == assistantMsgId }
+                                    if (idx != -1) {
+                                        val existing = chatMessages[idx]
+                                        chatMessages[idx] = existing.copy(text = existing.text + chunk)
+                                    }
+                                },
+                                onStatus = { status ->
+                                    streamStatusText = status
+                                },
+                                onComplete = { success, finalOutput ->
+                                    isStreaming = false
+                                    streamStatusText = ""
+                                    if (!success) {
+                                        val idx = chatMessages.indexOfFirst { it.id == assistantMsgId }
+                                        if (idx != -1) {
+                                            chatMessages[idx] = com.example.data.auth.ChatMessage(
+                                                id = assistantMsgId,
+                                                role = "assistant",
+                                                text = "⚠️ $finalOutput"
+                                            )
+                                        }
+                                    }
+                                }
+                            )
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = WerkerPrimary)
+                ) {
+                    Text("Vraag", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                }
+            }
+        }
+    }
+}
+

@@ -2,6 +2,7 @@ package com.example.ui.screens
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -11,6 +12,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
@@ -48,6 +51,7 @@ import com.example.ui.theme.DarkCardSurface
 import com.example.ui.theme.DarkCardSurfaceVariant
 import com.example.ui.theme.KlantPrimary
 import com.example.ui.theme.PrimaryBlueGlow
+import com.example.ui.theme.StatusDanger
 import com.example.ui.theme.StatusInfo
 import com.example.ui.theme.StatusSuccess
 import com.example.ui.theme.StatusWarning
@@ -67,7 +71,7 @@ fun ClientDashboardScreen(
     val securityAlert by viewModel.securityAlert.collectAsState()
 
     var selectedTab by remember { mutableIntStateOf(0) }
-    val tabs = listOf("Mijn Werken & Status (${myTasks.size})", "Mijn Aanvragen (${myRequests.size})")
+    val tabs = listOf("Mijn Werken & Status (${myTasks.size})", "Mijn Aanvragen (${myRequests.size})", "Klant AI Assistent")
 
     var showNewRequestDialog by remember { mutableStateOf(false) }
 
@@ -159,6 +163,9 @@ fun ClientDashboardScreen(
                 1 -> ClientRequestsTab(
                     requests = myRequests,
                     onNewRequestClick = { showNewRequestDialog = true }
+                )
+                2 -> ClientAIAssistantTab(
+                    viewModel = viewModel
                 )
             }
         }
@@ -376,3 +383,250 @@ private fun CreateServiceRequestDialog(
         }
     )
 }
+
+@Composable
+private fun ClientAIAssistantTab(
+    viewModel: DashboardViewModel
+) {
+    val session by viewModel.chatGPTSession.collectAsState()
+    val chatMessages = remember { androidx.compose.runtime.mutableStateListOf<com.example.data.auth.ChatMessage>() }
+    var promptInput by remember { mutableStateOf("") }
+    var isStreaming by remember { mutableStateOf(false) }
+    var streamStatusText by remember { mutableStateOf("") }
+
+    val listState = androidx.compose.foundation.lazy.rememberLazyListState()
+
+    androidx.compose.runtime.LaunchedEffect(chatMessages.size) {
+        if (chatMessages.isNotEmpty()) {
+            listState.animateScrollToItem(chatMessages.size - 1)
+        }
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(DarkAppBackground)
+    ) {
+        // Banner
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = DarkCardSurface),
+            border = BorderStroke(1.dp, KlantPrimary.copy(alpha = 0.5f)),
+            shape = androidx.compose.foundation.shape.RoundedCornerShape(12.dp)
+        ) {
+            Column(modifier = Modifier.padding(14.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column {
+                        Text(
+                            text = "💬 Klant AI Assistent (Harnas 1)",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 16.sp,
+                            color = TextPrimary
+                        )
+                        Text(
+                            text = "Veilige klantenservice voor vragen over diensten, tarieven, garantie en uw eigen aanvragen.",
+                            fontSize = 12.sp,
+                            color = TextSecondary
+                        )
+                    }
+
+                    if (session?.isValid == true) {
+                        Box(
+                            modifier = Modifier
+                                .background(StatusSuccess.copy(alpha = 0.2f), androidx.compose.foundation.shape.RoundedCornerShape(6.dp))
+                                .border(1.dp, StatusSuccess, androidx.compose.foundation.shape.RoundedCornerShape(6.dp))
+                                .padding(horizontal = 8.dp, vertical = 4.dp)
+                        ) {
+                            Text("● Actief", color = StatusSuccess, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        }
+                    } else {
+                        Box(
+                            modifier = Modifier
+                                .background(StatusDanger.copy(alpha = 0.2f), androidx.compose.foundation.shape.RoundedCornerShape(6.dp))
+                                .border(1.dp, StatusDanger, androidx.compose.foundation.shape.RoundedCornerShape(6.dp))
+                                .padding(horizontal = 8.dp, vertical = 4.dp)
+                        ) {
+                            Text("● Geen Token", color = StatusDanger, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(10.dp))
+
+        // Chat messages list
+        LazyColumn(
+            state = listState,
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            if (chatMessages.isEmpty()) {
+                item {
+                    Card(
+                        colors = CardDefaults.cardColors(containerColor = DarkCardSurface),
+                        border = BorderStroke(1.dp, DarkCardBorder),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(20.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Text(
+                                text = "Stel een vraag aan onze klantassistent:\n• 'Wat is de status van mijn lopende aanvraag?'\n• 'Welke garantie geldt er op installaties?'\n• 'Hoe vraag ik een spoedopdracht aan?'",
+                                color = TextSecondary,
+                                fontSize = 13.sp,
+                                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                                lineHeight = 18.sp
+                            )
+                        }
+                    }
+                }
+            }
+
+            items(chatMessages, key = { it.id }) { msg ->
+                val isUser = msg.role == "user"
+                val align = if (isUser) Alignment.End else Alignment.Start
+                val bg = if (isUser) Color(0xFF0F766E) else DarkCardSurfaceVariant
+                val borderColor = if (isUser) KlantPrimary else DarkCardBorder
+
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 4.dp),
+                    horizontalAlignment = align
+                ) {
+                    Card(
+                        colors = CardDefaults.cardColors(containerColor = bg),
+                        border = BorderStroke(1.dp, borderColor),
+                        shape = androidx.compose.foundation.shape.RoundedCornerShape(12.dp),
+                        modifier = Modifier.fillMaxWidth(0.92f)
+                    ) {
+                        Column(modifier = Modifier.padding(12.dp)) {
+                            Text(
+                                text = if (isUser) "U (Klant)" else "Klantenservice AI",
+                                color = if (isUser) KlantPrimary else Color(0xFF5EEAD4),
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 11.sp
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = msg.text.ifBlank { "..." },
+                                color = TextPrimary,
+                                fontSize = 13.sp,
+                                lineHeight = 18.sp
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        if (isStreaming) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 4.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                androidx.compose.material3.CircularProgressIndicator(
+                    modifier = Modifier.size(14.dp),
+                    color = KlantPrimary
+                )
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(text = streamStatusText.ifBlank { "Klantassistent typt..." }, color = KlantPrimary, fontSize = 11.sp)
+            }
+            Spacer(modifier = Modifier.height(4.dp))
+        }
+
+        // Input
+        Card(
+            colors = CardDefaults.cardColors(containerColor = DarkCardSurface),
+            border = BorderStroke(1.dp, DarkCardBorder),
+            shape = androidx.compose.foundation.shape.RoundedCornerShape(12.dp),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                androidx.compose.material3.OutlinedTextField(
+                    value = promptInput,
+                    onValueChange = { promptInput = it },
+                    placeholder = { Text("Stel een vraag aan de klantassistent...", color = TextMuted, fontSize = 13.sp) },
+                    colors = androidx.compose.material3.OutlinedTextFieldDefaults.colors(
+                        focusedTextColor = TextPrimary,
+                        unfocusedTextColor = TextPrimary,
+                        focusedBorderColor = KlantPrimary,
+                        unfocusedBorderColor = DarkCardBorder,
+                        focusedContainerColor = DarkCardSurfaceVariant,
+                        unfocusedContainerColor = DarkCardSurfaceVariant
+                    ),
+                    modifier = Modifier.weight(1f)
+                )
+
+                Button(
+                    onClick = {
+                        if (promptInput.isNotBlank() && !isStreaming) {
+                            val userText = promptInput
+                            promptInput = ""
+                            val userMsg = com.example.data.auth.ChatMessage(role = "user", text = userText)
+                            chatMessages.add(userMsg)
+
+                            val assistantMsgId = java.util.UUID.randomUUID().toString()
+                            chatMessages.add(com.example.data.auth.ChatMessage(id = assistantMsgId, role = "assistant", text = ""))
+
+                            isStreaming = true
+                            streamStatusText = "Antwoord genereren..."
+
+                            viewModel.sendHarnessPrompt(
+                                category = com.example.data.ai.AIHarnessCategory.KLANT,
+                                messages = chatMessages.dropLast(1),
+                                userPrompt = userText,
+                                onChunk = { chunk ->
+                                    val idx = chatMessages.indexOfFirst { it.id == assistantMsgId }
+                                    if (idx != -1) {
+                                        val existing = chatMessages[idx]
+                                        chatMessages[idx] = existing.copy(text = existing.text + chunk)
+                                    }
+                                },
+                                onStatus = { status ->
+                                    streamStatusText = status
+                                },
+                                onComplete = { success, finalOutput ->
+                                    isStreaming = false
+                                    streamStatusText = ""
+                                    if (!success) {
+                                        val idx = chatMessages.indexOfFirst { it.id == assistantMsgId }
+                                        if (idx != -1) {
+                                            chatMessages[idx] = com.example.data.auth.ChatMessage(
+                                                id = assistantMsgId,
+                                                role = "assistant",
+                                                text = "⚠️ $finalOutput"
+                                            )
+                                        }
+                                    }
+                                }
+                            )
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = KlantPrimary)
+                ) {
+                    Text("Verzend", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                }
+            }
+        }
+    }
+}
+

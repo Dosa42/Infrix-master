@@ -184,7 +184,7 @@ fun SimpleLoginScreen(
 
                 // 2. Typeveld voor gebruiker-naam
                 Text(
-                    text = "Gebruiker-naam:",
+                    text = "Gebruikersnaam:",
                     fontSize = 14.sp,
                     fontWeight = FontWeight.Bold,
                     color = TextPrimary
@@ -193,7 +193,7 @@ fun SimpleLoginScreen(
                 OutlinedTextField(
                     value = uiState.usernameInput,
                     onValueChange = { authViewModel.onUsernameChanged(it) },
-                    placeholder = { Text("gebruiker-naam (bijv. Infrix-dev)", color = TextMuted) },
+                    placeholder = { Text("Voer uw gebruikersnaam in", color = TextMuted) },
                     singleLine = true,
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedTextColor = TextPrimary,
@@ -212,7 +212,7 @@ fun SimpleLoginScreen(
 
                 // 3. Typeveld voor passwoord
                 Text(
-                    text = "Passwoord:",
+                    text = "Wachtwoord:",
                     fontSize = 14.sp,
                     fontWeight = FontWeight.Bold,
                     color = TextPrimary
@@ -221,7 +221,7 @@ fun SimpleLoginScreen(
                 OutlinedTextField(
                     value = uiState.passwordInput,
                     onValueChange = { authViewModel.onPasswordChanged(it) },
-                    placeholder = { Text("passwoord", color = TextMuted) },
+                    placeholder = { Text("Voer uw wachtwoord in", color = TextMuted) },
                     singleLine = true,
                     visualTransformation = PasswordVisualTransformation(),
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),

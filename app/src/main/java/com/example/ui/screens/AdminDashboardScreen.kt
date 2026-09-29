@@ -92,6 +92,7 @@ fun AdminDashboardScreen(
         "Live Monitoring & Sessies",
         "Planning Beheer (${allTasks.size})",
         "Backend Agenda (${allCalendarEvents.size})",
+        "AI Master Console (3 Harnassen)",
         "Backend Architectuur & Tools",
         "Audit Trail & Beveiliging"
     )
@@ -218,10 +219,13 @@ fun AdminDashboardScreen(
                 3 -> AdminCalendarBackendTab(
                     viewModel = viewModel
                 )
-                4 -> AdminBackendToolsTab(
+                4 -> AdminAIConsoleTab(
                     viewModel = viewModel
                 )
-                5 -> AdminAuditTab(logs = auditLogs)
+                5 -> AdminBackendToolsTab(
+                    viewModel = viewModel
+                )
+                6 -> AdminAuditTab(logs = auditLogs)
             }
         }
     }

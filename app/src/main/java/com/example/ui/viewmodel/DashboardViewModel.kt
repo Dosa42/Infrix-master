@@ -519,6 +519,58 @@ class DashboardViewModel(private val repository: AppRepository) : ViewModel() {
         return repository.calendarBackendService.createGoogleSearchIntent(query)
     }
 
+    val chatGPTSession: StateFlow<com.example.data.auth.ChatGPTSession?> = repository.chatGPTSession
+    val chatGPTModels: StateFlow<List<com.example.data.auth.ChatGPTModelInfo>> = repository.chatGPTModels
+
+    // 7. ChatGPT Token Injectie & 3-Tier AI Harness
+    fun injectChatGPTToken(rawTokenOrJson: String, onComplete: (Boolean, String) -> Unit) {
+        viewModelScope.launch {
+            when (val res = repository.injectChatGPTToken(rawTokenOrJson)) {
+                is SecurityResult.Success -> {
+                    onComplete(true, "Token succesvol gevalideerd en opgeslagen. AI Backend is gewapend!")
+                }
+                is SecurityResult.Denied -> {
+                    showDeniedAlert(res)
+                    onComplete(false, res.reason)
+                }
+            }
+        }
+    }
+
+    fun clearChatGPTSession(onComplete: () -> Unit) {
+        viewModelScope.launch {
+            when (val res = repository.clearChatGPTSession()) {
+                is SecurityResult.Success -> onComplete()
+                is SecurityResult.Denied -> showDeniedAlert(res)
+            }
+        }
+    }
+
+    fun sendHarnessPrompt(
+        category: com.example.data.ai.AIHarnessCategory,
+        messages: List<com.example.data.auth.ChatMessage>,
+        userPrompt: String,
+        onChunk: (String) -> Unit,
+        onStatus: (String) -> Unit,
+        onComplete: (Boolean, String) -> Unit
+    ) {
+        viewModelScope.launch {
+            when (val res = repository.executeHarnessStream(
+                category = category,
+                messages = messages,
+                userPrompt = userPrompt,
+                onChunk = onChunk,
+                onStatus = onStatus
+            )) {
+                is SecurityResult.Success -> onComplete(true, res.data)
+                is SecurityResult.Denied -> {
+                    showDeniedAlert(res)
+                    onComplete(false, res.reason)
+                }
+            }
+        }
+    }
+
     private fun showDeniedAlert(denied: SecurityResult.Denied) {
         _securityAlert.value = SecurityAlertData(
             title = "Toegang Geweigerd",

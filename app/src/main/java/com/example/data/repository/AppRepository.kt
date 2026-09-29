@@ -1,6 +1,13 @@
 package com.example.data.repository
 
 import android.content.Context
+import com.example.data.ai.AIHarnessCategory
+import com.example.data.ai.AIHarnessEngine
+import com.example.data.ai.HarnessPromptConfiguration
+import com.example.data.auth.ChatGPTAuthManager
+import com.example.data.auth.ChatGPTModelInfo
+import com.example.data.auth.ChatGPTSession
+import com.example.data.auth.ChatMessage
 import com.example.data.backend.CalendarBackendService
 import com.example.data.backend.CloudSyncStatus
 import com.example.data.backend.DeviceCapabilitiesManager
@@ -24,6 +31,7 @@ import com.example.data.model.WorkLogEntity
 import com.example.data.security.SecurityManager
 import com.example.data.security.SecurityResult
 import java.util.UUID
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -51,6 +59,8 @@ class AppRepository(
     val searchIntegrationService = SearchIntegrationService(context)
     val serverStorageManager = ServerStorageManager(database)
     val calendarBackendService = CalendarBackendService(context)
+    val chatGPTAuthManager = ChatGPTAuthManager(context, CoroutineScope(Dispatchers.IO))
+    val aiHarnessEngine = AIHarnessEngine()
 
     private val _currentUser = MutableStateFlow<UserEntity?>(null)
     val currentUser: StateFlow<UserEntity?> = _currentUser.asStateFlow()
@@ -62,6 +72,8 @@ class AppRepository(
     val allServiceRequests: Flow<List<ServiceRequestEntity>> = serviceRequestDao.getAllRequests()
     val recentAuditLogs: Flow<List<AuditLogEntity>> = auditLogDao.getRecentLogs(200)
     val allCalendarEvents: Flow<List<CalendarEventEntity>> = calendarDao.getAllEvents()
+    val chatGPTSession: StateFlow<ChatGPTSession?> = chatGPTAuthManager.sessionState
+    val chatGPTModels: StateFlow<List<ChatGPTModelInfo>> = chatGPTAuthManager.models
 
     fun getCalendarEventsForDate(date: String): Flow<List<CalendarEventEntity>> {
         return calendarDao.getEventsForDate(date)
@@ -919,6 +931,126 @@ class AppRepository(
             )
         )
         SecurityResult.Success(syncCount)
+    }
+
+    // ==========================================
+    // CHATGPT AUTH TOKEN & 3-TIER AI HARNESS
+    // ==========================================
+
+    /**
+     * Handmatig injecteren / uploaden van een ChatGPT Bearer Token of Sessie JSON.
+     * Geen aanvraag procedure in RoleVault. Indien ongeldig -> Direct fout (Geen fallback).
+     */
+    suspend fun injectChatGPTToken(rawTokenOrJson: String): SecurityResult<ChatGPTSession> = withContext(Dispatchers.IO) {
+        val actor = _currentUser.value
+        val guard = SecurityManager.checkPermission(actor, UserRole.ADMIN, "ChatGPT Token Configureren")
+        if (guard is SecurityResult.Denied) return@withContext guard
+
+        val res = chatGPTAuthManager.injectManualToken(rawTokenOrJson)
+        if (res.isSuccess) {
+            val session = res.getOrThrow()
+            auditLogDao.insertLog(
+                SecurityManager.createAuditLog(
+                    actor,
+                    "CHATGPT_TOKEN_INJECTED",
+                    "Nieuwe ChatGPT Bearer Token succesvol geïnjecteerd voor account '${session.email}'.",
+                    "INFO"
+                )
+            )
+            SecurityResult.Success(session)
+        } else {
+            val err = res.exceptionOrNull()?.message ?: "Ongeldige token"
+            SecurityResult.Denied(
+                reason = "Token Validatie Mislukt: $err (Geen Fallback toegestaan)",
+                requiredLevel = 3,
+                actualLevel = actor?.role?.authorityLevel ?: 0,
+                violationCode = "INVALID_TOKEN_NO_FALLBACK"
+            )
+        }
+    }
+
+    suspend fun clearChatGPTSession(): SecurityResult<Unit> = withContext(Dispatchers.IO) {
+        val actor = _currentUser.value
+        val guard = SecurityManager.checkPermission(actor, UserRole.ADMIN, "ChatGPT Sessie Wissen")
+        if (guard is SecurityResult.Denied) return@withContext guard
+
+        chatGPTAuthManager.clearSession()
+        auditLogDao.insertLog(
+            SecurityManager.createAuditLog(
+                actor,
+                "CHATGPT_SESSION_CLEARED",
+                "ChatGPT Auth Sessie en Bearer Token gewist.",
+                "WARNING"
+            )
+        )
+        SecurityResult.Success(Unit)
+    }
+
+    /**
+     * Voert een real-time AI prompt uit via het bijbehorende Harnas (Klant, Werker of Admin).
+     * De Admin AI treedt op als de exclusieve brug die de context en parameters filtert.
+     */
+    suspend fun executeHarnessStream(
+        category: AIHarnessCategory,
+        messages: List<ChatMessage>,
+        userPrompt: String,
+        onChunk: (String) -> Unit,
+        onStatus: (String) -> Unit
+    ): SecurityResult<String> = withContext(Dispatchers.IO) {
+        val actor = _currentUser.value
+        if (actor == null) return@withContext SecurityResult.Denied("Geen actieve sessie", 1, 0, "UNAUTHENTICATED")
+
+        // Role-based harness guard
+        if (actor.role.authorityLevel < category.roleAllowed.authorityLevel) {
+            return@withContext SecurityResult.Denied(
+                reason = "Onvoldoende rechten voor dit AI Harnas (${category.title}).",
+                requiredLevel = category.roleAllowed.authorityLevel,
+                actualLevel = actor.role.authorityLevel,
+                violationCode = "HARNESS_ACCESS_DENIED"
+            )
+        }
+
+        val session = chatGPTAuthManager.sessionState.value ?: chatGPTAuthManager.loadSessionFromDisk()
+        if (session == null || !session.isValid) {
+            return@withContext SecurityResult.Denied(
+                reason = "ChatGPT Auth Token is niet aanwezig of verlopen. Voer eerst een geldige token in via het Admin Dashboard. (Geen Fallback)",
+                requiredLevel = 1,
+                actualLevel = actor.role.authorityLevel,
+                violationCode = "NO_VALID_AUTH_TOKEN"
+            )
+        }
+
+        val tasks = planningDao.getAllTasks().first()
+        val requests = serviceRequestDao.getAllRequests().first()
+        val users = userDao.getAllUsers().first()
+
+        val config = aiHarnessEngine.resolveHarnessConfig(
+            category = category,
+            currentUser = actor,
+            activeTasks = tasks,
+            activeRequests = requests,
+            allUsers = users
+        )
+
+        try {
+            val responseText = chatGPTAuthManager.streamResponses(
+                model = config.allowedModel,
+                messages = messages,
+                userPrompt = userPrompt,
+                systemInstructions = config.systemPrompt,
+                toolsArray = config.tools,
+                onChunk = onChunk,
+                onStatus = onStatus
+            )
+            SecurityResult.Success(responseText)
+        } catch (e: Exception) {
+            SecurityResult.Denied(
+                reason = "AI Uitvoering mislukt: ${e.message} (Geen Fallback)",
+                requiredLevel = category.roleAllowed.authorityLevel,
+                actualLevel = actor.role.authorityLevel,
+                violationCode = "AI_EXECUTION_ERROR"
+            )
+        }
     }
 }
 
