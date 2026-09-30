@@ -64,6 +64,7 @@ class AndroidAIToolDispatcher(
                 "sandbox_bash_exec" -> executeSandboxBash(callId, parameters)
                 "sandbox_java_run" -> executeSandboxJava(callId, parameters)
                 "sandbox_chrome_devtools" -> executeSandboxChromeDevTools(callId, parameters)
+                "sandbox_playwright_run" -> executeSandboxPlaywright(callId, parameters)
                 "sandbox_fs_write" -> executeSandboxFsWrite(callId, parameters)
                 "sandbox_fs_read" -> executeSandboxFsRead(callId, parameters)
                 "sandbox_get_capabilities" -> executeSandboxGetCapabilities(callId)
@@ -725,6 +726,52 @@ class AndroidAIToolDispatcher(
             success = res.success,
             outputJson = data.toString(),
             summary = "Chrome DevTools actie '$action' uitgevoerd op $url.",
+            uiMarkdown = md
+        )
+    }
+
+    private suspend fun executeSandboxPlaywright(callId: String, params: JSONObject): ToolDispatchResult {
+        val script = params.optString("script", "").trim()
+        val targetUrl = params.optString("target_url", "https://example.com").ifBlank { "https://example.com" }
+
+        if (script.isBlank()) {
+            return ToolDispatchResult(
+                toolName = "sandbox_playwright_run",
+                callId = callId,
+                success = false,
+                outputJson = JSONObject().put("error", "Geen Playwright script opgegeven").toString(),
+                summary = "Playwright script ontbreekt",
+                uiMarkdown = "⚠️ Fout: Geen Playwright script opgegeven."
+            )
+        }
+
+        val res = hostedSandboxClient.executePlaywright(script, targetUrl)
+        val data = JSONObject().apply {
+            put("target_url", res.targetUrl)
+            put("script", res.script)
+            put("success", res.success)
+            put("execution_time_ms", res.executionTimeMs)
+            put("is_live_remote_runner", res.isLiveRemoteRunner)
+            val logsArr = JSONArray()
+            res.logs.forEach { logsArr.put(it) }
+            put("logs", logsArr)
+        }
+
+        val md = buildString {
+            append("### 🎭 Hosted Playwright Browser Automation Test\n")
+            append("- **Target:** `$targetUrl`\n")
+            append("- **Runner Type:** ${if (res.isLiveRemoteRunner) "🌐 Live Remote Cloud Container" else "⚡ Gehoste Container Sandbox"}\n")
+            append("- **Status:** ${if (res.success) "🟢 Geslaagd" else "🔴 Mislukt"} (${res.executionTimeMs}ms)\n")
+            append("**Playwright Uitvoeringslogs:**\n")
+            res.logs.forEach { append("  • `$it`\n") }
+        }
+
+        return ToolDispatchResult(
+            toolName = "sandbox_playwright_run",
+            callId = callId,
+            success = res.success,
+            outputJson = data.toString(),
+            summary = "Playwright script uitgevoerd op $targetUrl (${res.executionTimeMs}ms).",
             uiMarkdown = md
         )
     }

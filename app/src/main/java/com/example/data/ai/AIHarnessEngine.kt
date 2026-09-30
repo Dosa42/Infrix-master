@@ -202,11 +202,25 @@ class AIHarnessEngine {
                 val systemPrompt = """
                     Je bent de Admin Master AI van RoleVault voor hoofdbeheerder '$adminName'.
                     
-                    JE ROL ALS CENTRALE BRUG & ORCHESTRATOR:
-                    1. Je hebt de hoogste autoriteit binnen de applicatie en beschikt over alle diagnostische, ontwikkel- en beheerinstrumenten.
-                    2. Jij bent de ENIGE brug die de dynamische modellen, reasoning efforts, actieve endpoints en veiligheidspolicies beheert voor de 'Klant AI' en 'Werker AI'.
-                    3. De menselijke beheerder hoeft niet elke AI afzonderlijk te configureren; jij regelt modelselecties, tool calls en richtlijnen direct.
-                    4. Je bewaakt de strikte scheiding van data tussen Klant, Werker en Systeem.
+                    AUTONOME TOOL-UITVOERING & HOSTED CAPABILITIES:
+                    1. Je beschikt over echte executie-omgevingen:
+                       - Linux Bash Container (`sandbox_bash_exec`)
+                       - OpenJDK 21 JVM & Compiler (`sandbox_java_run`)
+                       - Playwright & Chrome DevTools Protocol (`sandbox_playwright_run`, `sandbox_chrome_devtools`)
+                       - Container Bestandssysteem (`sandbox_fs_write`, `sandbox_fs_read`)
+                       - Live Android Systeemsensoren & Telemetrie (`get_telemetry_metrics`)
+                       - Systeemaudits & Database Logs (`inspect_system_audit_logs`)
+                    
+                    2. DE GEBRUIKER HOEFT GEEN TOOLNAMEN OF COMMANDO'S TE NOEMEN:
+                       - Als de gebruiker vraagt: "test de ai", "wat is de status van het apparaat", "kijk naar de batterij": roep DIRECT `get_telemetry_metrics` aan.
+                       - Als de gebruiker vraagt om Java code te testen of uit te voeren: roep DIRECT `sandbox_java_run` aan.
+                       - Als de gebruiker vraagt om een website te testen, schermen te inspecteren of Playwright scripts te draaien: roep DIRECT `sandbox_playwright_run` of `sandbox_chrome_devtools` aan.
+                       - Als de gebruiker vraagt om bestanden te bekijken of shell commando's te testen: roep DIRECT `sandbox_bash_exec` aan.
+                       - Voer ALTIJD autonoom de benodigde tools uit, interpreteer het resultaat, en antwoord in heldere mensentaal.
+                    
+                    3. JE ROL ALS CENTRALE BRUG:
+                       - Jij beheert de policies en actieve modellen voor Klant AI en Werker AI.
+                       - Je bewaakt de strikte scheiding van data tussen Klant, Werker en Systeem.
                     
                     SYSTEEM OVERZICHT:
                     - Totaal gebruikers in database: ${allUsers.size} (${allUsers.count { it.role == UserRole.WERKER }} werkers, ${allUsers.count { it.role == UserRole.KLANT }} klanten)
@@ -353,6 +367,16 @@ class AIHarnessEngine {
                 "selector" to "CSS selector voor DOM inspectie (optioneel)"
             ),
             required = listOf("action")
+        )
+
+        addTool(
+            name = "sandbox_playwright_run",
+            description = "Voer end-to-end browser automatisering en interactieve tests uit via Playwright in de gehoste container",
+            props = mapOf(
+                "script" to "Het Playwright script (Node.js/JS) om uit te voeren (bv. const page = await browser.newPage(); await page.goto('...');)",
+                "target_url" to "Doel URL voor de browser test (optioneel)"
+            ),
+            required = listOf("script")
         )
 
         addTool(

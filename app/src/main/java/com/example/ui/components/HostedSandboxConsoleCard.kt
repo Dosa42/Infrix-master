@@ -425,21 +425,36 @@ fun HostedSandboxConsoleCard(
                         }
                     }
 
-                    // CDP Action Chips
+                    // CDP & Playwright Action Chips
                     Row(
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState()),
                         horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
                         listOf(
                             Pair("screenshot", "📸 Screenshot"),
                             Pair("inspect_dom", "🔍 Inspect DOM"),
-                            Pair("evaluate_js", "⚡ Eval JS")
+                            Pair("evaluate_js", "⚡ Eval JS"),
+                            Pair("playwright", "🎭 Playwright Test")
                         ).forEach { (act, label) ->
                             OutlinedButton(
                                 onClick = {
                                     coroutineScope.launch {
                                         isRunningCdp = true
-                                        cdpResult = sandboxClient.executeChromeDevTools(act, cdpUrl, script = "document.title")
+                                        if (act == "playwright") {
+                                            val pwScript = "const page = await browser.newPage(); await page.goto('$cdpUrl');"
+                                            val pwRes = sandboxClient.executePlaywright(pwScript, cdpUrl)
+                                            cdpResult = ChromeDevToolsResult(
+                                                action = "playwright",
+                                                url = cdpUrl,
+                                                success = pwRes.success,
+                                                title = "Playwright Test op $cdpUrl (${if (pwRes.isLiveRemoteRunner) "Remote Container" else "Sandbox Container"})",
+                                                consoleLogs = pwRes.logs
+                                            )
+                                        } else {
+                                            cdpResult = sandboxClient.executeChromeDevTools(act, cdpUrl, script = "document.title")
+                                        }
                                         isRunningCdp = false
                                     }
                                 },
