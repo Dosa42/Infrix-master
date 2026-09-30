@@ -619,30 +619,197 @@ fun ChatMessageBubble(message: ChatMessage) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 4.dp, vertical = 2.dp),
+            .padding(horizontal = 4.dp, vertical = 3.dp),
         horizontalAlignment = align
     ) {
         Card(
             colors = CardDefaults.cardColors(containerColor = bg),
             border = BorderStroke(1.dp, borderColor),
             shape = RoundedCornerShape(12.dp),
-            modifier = Modifier.fillMaxWidth(0.92f)
+            modifier = Modifier.fillMaxWidth(if (isUser) 0.85f else 0.98f)
         ) {
-            Column(modifier = Modifier.padding(12.dp)) {
-                Text(
-                    text = if (isUser) "U (Admin)" else "Admin Master AI",
-                    color = if (isUser) PrimaryBlueGlow else AdminPrimary,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 11.sp
-                )
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    text = message.text.ifBlank { "..." },
-                    color = TextPrimary,
-                    fontSize = 13.sp,
-                    lineHeight = 18.sp
-                )
+            Column(modifier = Modifier.padding(14.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = if (isUser) "U (Admin)" else "Admin Master AI",
+                        color = if (isUser) PrimaryBlueGlow else AdminPrimary,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 12.sp
+                    )
+
+                    if (!isUser && message.text.contains("```tool_call")) {
+                        Box(
+                            modifier = Modifier
+                                .background(StatusSuccess.copy(alpha = 0.2f), RoundedCornerShape(6.dp))
+                                .border(1.dp, StatusSuccess, RoundedCornerShape(6.dp))
+                                .padding(horizontal = 6.dp, vertical = 2.dp)
+                        ) {
+                            Text(
+                                text = "⚡ Tool Aangeroepen & Uitgevoerd",
+                                color = StatusSuccess,
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(6.dp))
+
+                if (!isUser && message.text.contains("```tool_call")) {
+                    RichAIToolMessageView(fullText = message.text)
+                } else {
+                    Text(
+                        text = message.text.ifBlank { "..." },
+                        color = TextPrimary,
+                        fontSize = 13.sp,
+                        lineHeight = 19.sp
+                    )
+                }
             }
+        }
+    }
+}
+
+@Composable
+fun RichAIToolMessageView(fullText: String) {
+    val toolCallRegex = Regex("```tool_call\\s*\\n([\\s\\S]*?)\\n```")
+    val toolResultRegex = Regex("```tool_result\\s*\\n([\\s\\S]*?)\\n```")
+
+    val toolCallMatch = toolCallRegex.find(fullText)
+    val toolResultMatch = toolResultRegex.find(fullText)
+
+    val cleanTextBeforeTool = fullText.substringBefore("```tool_call").trim()
+    val cleanTextAfterTool = fullText.substringAfter("```tool_result").substringAfter("```").trim()
+
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        if (cleanTextBeforeTool.isNotBlank()) {
+            Text(
+                text = cleanTextBeforeTool,
+                color = TextPrimary,
+                fontSize = 13.sp,
+                lineHeight = 18.sp
+            )
+        }
+
+        // Render Tool Call Card
+        toolCallMatch?.let { match ->
+            val jsonStr = match.groupValues[1]
+            val obj = try { org.json.JSONObject(jsonStr) } catch (_: Exception) { null }
+            val toolName = obj?.optString("tool_name", obj.optString("skill", obj.optString("action", "execute_tool"))) ?: "tool"
+            val params = obj?.optJSONObject("parameters")
+
+            Card(
+                colors = CardDefaults.cardColors(containerColor = Color(0xFF0F172A)),
+                border = BorderStroke(1.dp, PrimaryBlueGlow.copy(alpha = 0.8f)),
+                shape = RoundedCornerShape(10.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(12.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(text = "🛠️", fontSize = 16.sp)
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = "Tool Call: $toolName",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 13.sp,
+                                color = PrimaryBlueGlow
+                            )
+                        }
+
+                        Box(
+                            modifier = Modifier
+                                .background(StatusSuccess.copy(alpha = 0.25f), RoundedCornerShape(6.dp))
+                                .border(1.dp, StatusSuccess, RoundedCornerShape(6.dp))
+                                .padding(horizontal = 6.dp, vertical = 2.dp)
+                        ) {
+                            Text(
+                                text = "● Succesvol Uitgevoerd",
+                                color = StatusSuccess,
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+
+                    if (params != null && params.length() > 0) {
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(
+                            text = "Parameters: ${params.toString()}",
+                            fontSize = 11.sp,
+                            fontFamily = FontFamily.Monospace,
+                            color = TextMuted
+                        )
+                    }
+                }
+            }
+        }
+
+        // Render Tool Result Data
+        toolResultMatch?.let { match ->
+            val resultJsonStr = match.groupValues[1]
+            val resultObj = try { org.json.JSONObject(resultJsonStr) } catch (_: Exception) { null }
+
+            Card(
+                colors = CardDefaults.cardColors(containerColor = Color(0xFF064E3B).copy(alpha = 0.2f)),
+                border = BorderStroke(1.dp, StatusSuccess.copy(alpha = 0.7f)),
+                shape = RoundedCornerShape(10.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(12.dp)) {
+                    Text(
+                        text = "📊 Live Uitvoeringsresultaat van Apparaat:",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 12.sp,
+                        color = StatusSuccess
+                    )
+                    Spacer(modifier = Modifier.height(6.dp))
+
+                    if (resultObj != null) {
+                        val keys = resultObj.keys()
+                        while (keys.hasNext()) {
+                            val k = keys.next()
+                            val v = resultObj.get(k)
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 1.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text(
+                                    text = k.replace("_", " ").replaceFirstChar { it.uppercase() },
+                                    fontSize = 11.sp,
+                                    color = TextSecondary
+                                )
+                                Text(
+                                    text = v.toString(),
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = TextPrimary
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        if (cleanTextAfterTool.isNotBlank()) {
+            Text(
+                text = cleanTextAfterTool,
+                color = TextPrimary,
+                fontSize = 13.sp,
+                lineHeight = 18.sp
+            )
         }
     }
 }

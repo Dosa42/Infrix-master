@@ -759,12 +759,16 @@ private fun WorkerAICoPilotTab(
                                 fontSize = 11.sp
                             )
                             Spacer(modifier = Modifier.height(4.dp))
-                            Text(
-                                text = msg.text.ifBlank { "..." },
-                                color = TextPrimary,
-                                fontSize = 13.sp,
-                                lineHeight = 18.sp
-                            )
+                            if (!isUser && msg.text.contains("```tool_call")) {
+                                RichAIToolMessageView(fullText = msg.text)
+                            } else {
+                                Text(
+                                    text = msg.text.ifBlank { "..." },
+                                    color = TextPrimary,
+                                    fontSize = 13.sp,
+                                    lineHeight = 18.sp
+                                )
+                            }
                         }
                     }
                 }

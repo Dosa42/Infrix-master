@@ -454,6 +454,7 @@ class ChatGPTAuthManager(
         systemInstructions: String,
         toolsArray: JSONArray = JSONArray(),
         reasoningEffort: String? = null,
+        onToolCall: (suspend (toolName: String, parameters: JSONObject) -> String)? = null,
         onChunk: (String) -> Unit,
         onStatus: (String) -> Unit
     ): String = withContext(Dispatchers.IO) {
@@ -579,11 +580,26 @@ class ChatGPTAuthManager(
                             val name = item?.optString("name") ?: inFlightFunctionCalls[callId]?.first ?: ""
                             val args = item?.optString("arguments") ?: inFlightFunctionCalls[callId]?.second?.toString() ?: "{}"
                             if (name.isNotBlank()) {
-                                val block = formatFunctionCallToToolBlock(name, args)
-                                if (!completedToolBlocks.contains(block)) {
-                                    completedToolBlocks.add(block)
-                                    accumulatedText.append("\n\n").append(block).append("\n")
-                                    onChunk("\n\n$block\n")
+                                val key = "$callId:$name:$args"
+                                if (!completedToolBlocks.contains(key)) {
+                                    completedToolBlocks.add(key)
+                                    val parsedArgs = try {
+                                        if (args.isNotBlank()) JSONObject(args) else JSONObject()
+                                    } catch (_: Exception) {
+                                        JSONObject()
+                                    }
+
+                                    if (onToolCall != null) {
+                                        onStatus("⚡ Uitvoeren van $name op Android...")
+                                        val output = onToolCall(name, parsedArgs)
+                                        accumulatedText.append(output)
+                                        onChunk(output)
+                                        onStatus("Tool '$name' voltooid")
+                                    } else {
+                                        val block = formatFunctionCallToToolBlock(name, args)
+                                        accumulatedText.append("\n\n").append(block).append("\n")
+                                        onChunk("\n\n$block\n")
+                                    }
                                 }
                             }
                         } else if (type == "response.created" || type == "response.in_progress" || type.startsWith("response.reasoning")) {
@@ -598,10 +614,24 @@ class ChatGPTAuthManager(
                                     if (itemType == "function_call") {
                                         val name = item.optString("name")
                                         val args = item.optString("arguments")
-                                        if (name.isNotBlank()) {
-                                            val block = formatFunctionCallToToolBlock(name, args)
-                                            if (!completedToolBlocks.contains(block)) {
-                                                completedToolBlocks.add(block)
+                                        val callId = item.optString("call_id", "call_$i")
+                                        val key = "$callId:$name:$args"
+                                        if (name.isNotBlank() && !completedToolBlocks.contains(key)) {
+                                            completedToolBlocks.add(key)
+                                            val parsedArgs = try {
+                                                if (args.isNotBlank()) JSONObject(args) else JSONObject()
+                                            } catch (_: Exception) {
+                                                JSONObject()
+                                            }
+
+                                            if (onToolCall != null) {
+                                                onStatus("⚡ Uitvoeren van $name op Android...")
+                                                val output = onToolCall(name, parsedArgs)
+                                                accumulatedText.append(output)
+                                                onChunk(output)
+                                                onStatus("Tool '$name' voltooid")
+                                            } else {
+                                                val block = formatFunctionCallToToolBlock(name, args)
                                                 accumulatedText.append("\n\n").append(block).append("\n")
                                                 onChunk("\n\n$block\n")
                                             }
