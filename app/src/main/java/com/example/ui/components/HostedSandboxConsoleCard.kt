@@ -101,13 +101,13 @@ fun HostedSandboxConsoleCard(
                     Spacer(modifier = Modifier.width(8.dp))
                     Column {
                         Text(
-                            text = "Gehoste Linux, Java & Chrome Sandbox",
+                            text = "Termux Codex & Playwright Sandbox",
                             fontWeight = FontWeight.Bold,
                             fontSize = 15.sp,
                             color = TextPrimary
                         )
                         Text(
-                            text = "Container: ${capabilities.containerId} • OpenJDK 21 • Bash 5.2 • CDP v1.3",
+                            text = "Endpoint: ${capabilities.containerId} • wss://fernlike-profusely-stunner.ngrok-free.dev",
                             fontSize = 11.sp,
                             color = TextMuted
                         )
@@ -121,7 +121,7 @@ fun HostedSandboxConsoleCard(
                         .padding(horizontal = 8.dp, vertical = 3.dp)
                 ) {
                     Text(
-                        text = "● HOSTED READY",
+                        text = "● TERMUX LIVE",
                         color = StatusSuccess,
                         fontWeight = FontWeight.Bold,
                         fontSize = 10.sp

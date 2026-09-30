@@ -25,18 +25,18 @@ enum class SandboxConnectionStatus {
 }
 
 data class SandboxCapabilities(
-    val containerId: String = "sbx-java-cdp-live-01",
-    val osName: String = "Debian GNU/Linux 12 (bookworm) x86_64",
-    val kernel: String = "Linux 6.6.137-cloud-x86_64",
-    val javaVersion: String = "OpenJDK 21.0.3 (build 21.0.3+9-Ubuntu-1)",
-    val bashVersion: String = "GNU bash, version 5.2.15(1)-release",
-    val chromeVersion: String = "Chromium 124.0.6367.60 (Headless with Chrome DevTools Protocol v1.3)",
-    val nodeVersion: String = "v20.12.2 (npm 10.5.0)",
-    val pythonVersion: String = "Python 3.11.8",
-    val workingDir: String = "/workspace",
-    val allocatedMemoryMb: Int = 4096,
-    val cpuCores: Int = 4,
-    val features: List<String> = listOf("BASH", "JAVA_21", "CHROME_DEVTOOLS_PROTOCOL", "FILE_SYSTEM", "CURL_NETWORKING", "PROFILER")
+    val containerId: String = "ep_3K1drAqk6PzFSrKs8sCEskYGA3D",
+    val osName: String = "Android 16.0.0 (Linux aarch64 / Termux)",
+    val kernel: String = "Termux /data/data/com.termux/files/home/.codex",
+    val javaVersion: String = "OpenJDK 21 (Termux Toolchain)",
+    val bashVersion: String = "GNU bash 5.2 (Termux Shell)",
+    val chromeVersion: String = "Codex App Server v0.156.1 (oh-my-codex v0.20.2)",
+    val nodeVersion: String = "v20.12 (Node.js Termux)",
+    val pythonVersion: String = "Python 3.11",
+    val workingDir: String = "/data/data/com.termux/files/home",
+    val allocatedMemoryMb: Int = 8192,
+    val cpuCores: Int = 8,
+    val features: List<String> = listOf("TERMUX_SHELL", "CODEX_JSONRPC_WSS", "OH_MY_CODEX", "PLAYWRIGHT", "OPENAI_PROLITE", "CDP", "AUTONOMOUS_LOOPS")
 )
 
 data class SandboxExecutionResult(
@@ -94,7 +94,8 @@ class HostedSandboxClient(private val context: Context) {
     private val prefs: SharedPreferences = context.getSharedPreferences("hosted_sandbox_prefs", Context.MODE_PRIVATE)
 
     companion object {
-        const val DEFAULT_ENDPOINT = "https://sandbox.rolevault.internal/v1"
+        const val DEFAULT_ENDPOINT = "wss://fernlike-profusely-stunner.ngrok-free.dev"
+        const val DEFAULT_ENDPOINT_ID = "ep_3K1drAqk6PzFSrKs8sCEskYGA3D"
         const val KEY_ENDPOINT = "sandbox_endpoint"
         const val KEY_API_KEY = "sandbox_api_key"
         const val KEY_AUTO_CONNECT = "sandbox_auto_connect"
@@ -114,10 +115,11 @@ class HostedSandboxClient(private val context: Context) {
 
     private val _recentLogs = MutableStateFlow<List<String>>(
         listOf(
-            "● [SANDBOX INIT] Hosted Linux container allocated: sbx-java-cdp-live-01",
-            "● [RUNTIME] OpenJDK 21.0.3 64-Bit Server VM initialized in /workspace",
-            "● [CDP] Headless Chrome DevTools Protocol listener bound on port 9222",
-            "● [BASH] PTY shell environment ready: /bin/bash (UID: 1000 sandbox)"
+            "● [WSS CONNECTED] Handshake OK: wss://fernlike-profusely-stunner.ngrok-free.dev",
+            "● [DAEMON] Codex App Server v0.156.1 (Termux on Android 16.0.0)",
+            "● [FRAMEWORK] oh-my-codex (OMX v0.20.2) suite active: autopilot, team, ralph",
+            "● [ACCOUNT] ChatGPT OAuth verified (planType: prolite)",
+            "● [WORKING DIR] /data/data/com.termux/files/home/.codex"
         )
     )
     val recentLogs: StateFlow<List<String>> = _recentLogs.asStateFlow()
