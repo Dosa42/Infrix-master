@@ -354,7 +354,19 @@ fun AdminAIConsoleTab(
         }
 
         // -------------------------------------------------------------
-        // 3. INTERACTIEVE ADMIN AI MASTER CONSOLE (CHAT & TOOL EXECUTION)
+        // 3. HOSTED LINUX, JAVA & CHROME DEVTOOLS SANDBOX CONSOLE
+        // -------------------------------------------------------------
+        item {
+            com.example.ui.components.HostedSandboxConsoleCard(
+                sandboxClient = viewModel.hostedSandboxClient,
+                onQuickPromptSelected = { prompt ->
+                    promptInput = prompt
+                }
+            )
+        }
+
+        // -------------------------------------------------------------
+        // 4. INTERACTIEVE ADMIN AI MASTER CONSOLE (CHAT & TOOL EXECUTION)
         // -------------------------------------------------------------
         item {
             Card(

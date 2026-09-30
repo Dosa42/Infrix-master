@@ -323,6 +323,62 @@ class AIHarnessEngine {
             required = emptyList()
         )
 
+        // HOSTED JAVA, BASH & CHROME DEVTOOLS SANDBOX TOOLS
+        addTool(
+            name = "sandbox_bash_exec",
+            description = "Voer willekeurige Linux Bash shell commando's uit in de gehoste container (/workspace, OpenJDK 21, Linux, PTY shell)",
+            props = mapOf(
+                "command" to "Het bash commando om uit te voeren (bv. 'javac Main.java && java Main', 'ls -la', 'uname -a', 'curl -I https://...')"
+            ),
+            required = listOf("command")
+        )
+
+        addTool(
+            name = "sandbox_java_run",
+            description = "Compileer en voer complete Java broncode uit in de gehoste OpenJDK 21 JVM sandbox",
+            props = mapOf(
+                "class_name" to "Hoofdklasse naam van het Java bestand (bv. 'Main')",
+                "source_code" to "De volledige Java broncode met public class en main methode"
+            ),
+            required = listOf("class_name", "source_code")
+        )
+
+        addTool(
+            name = "sandbox_chrome_devtools",
+            description = "Bedien headless Chromium via het Chrome DevTools Protocol (CDP): navigeren, screenshots, JavaScript evaluatie, DOM inspectie, console en network tracing",
+            props = mapOf(
+                "action" to "De CDP actie: 'navigate', 'screenshot', 'evaluate_js', 'inspect_dom'",
+                "url" to "Doel-URL voor navigatie (optioneel)",
+                "script" to "JavaScript expressie om uit te voeren in de browser (optioneel)",
+                "selector" to "CSS selector voor DOM inspectie (optioneel)"
+            ),
+            required = listOf("action")
+        )
+
+        addTool(
+            name = "sandbox_fs_write",
+            description = "Schrijf of bewerk een bestand in het gehoste container bestandssysteem (/workspace)",
+            props = mapOf(
+                "path" to "Bestandspad relatief aan /workspace (bv. 'Main.java', 'script.sh', 'data.json')",
+                "content" to "Tekstinhoud van het bestand"
+            ),
+            required = listOf("path", "content")
+        )
+
+        addTool(
+            name = "sandbox_fs_read",
+            description = "Lees de inhoud van een bestand uit het gehoste container bestandssysteem (/workspace)",
+            props = mapOf("path" to "Bestandspad relatief aan /workspace"),
+            required = listOf("path")
+        )
+
+        addTool(
+            name = "sandbox_get_capabilities",
+            description = "Inspecteer de specificaties en mogelijkheden van de gehoste Linux sandbox: OpenJDK 21 versie, Chrome DevTools Protocol, kernel, RAM en CPU limieten",
+            props = emptyMap(),
+            required = emptyList()
+        )
+
         return tools
     }
 }

@@ -61,7 +61,8 @@ class AppRepository(
     val calendarBackendService = CalendarBackendService(context)
     val chatGPTAuthManager = ChatGPTAuthManager(context, CoroutineScope(Dispatchers.IO))
     val aiHarnessEngine = AIHarnessEngine()
-    val aiToolExecutor = com.example.data.ai.AIToolExecutor(context, database, aiHarnessEngine)
+    val hostedSandboxClient = com.example.data.backend.HostedSandboxClient(context)
+    val aiToolDispatcher: com.example.data.ai.AIToolDispatcher = com.example.data.ai.AndroidAIToolDispatcher(context, database, aiHarnessEngine, hostedSandboxClient)
 
     private val _currentUser = MutableStateFlow<UserEntity?>(null)
     val currentUser: StateFlow<UserEntity?> = _currentUser.asStateFlow()
@@ -1075,10 +1076,7 @@ class AppRepository(
                 systemInstructions = config.systemPrompt,
                 toolsArray = config.tools,
                 reasoningEffort = config.reasoningEffort,
-                onToolCall = { toolName, parameters ->
-                    val result = aiToolExecutor.executeTool(toolName, parameters)
-                    "\n\n```tool_call\n{\n  \"action\": \"execute_tool\",\n  \"tool_name\": \"$toolName\",\n  \"parameters\": $parameters\n}\n```\n\n```tool_result\n${result.data.toString(2)}\n```\n\n${result.formattedMarkdown}"
-                },
+                toolDispatcher = aiToolDispatcher,
                 onChunk = onChunk,
                 onStatus = onStatus
             )

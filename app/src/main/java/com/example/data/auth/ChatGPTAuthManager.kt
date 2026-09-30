@@ -454,7 +454,7 @@ class ChatGPTAuthManager(
         systemInstructions: String,
         toolsArray: JSONArray = JSONArray(),
         reasoningEffort: String? = null,
-        onToolCall: (suspend (toolName: String, parameters: JSONObject) -> String)? = null,
+        toolDispatcher: com.example.data.ai.AIToolDispatcher? = null,
         onChunk: (String) -> Unit,
         onStatus: (String) -> Unit
     ): String = withContext(Dispatchers.IO) {
@@ -502,164 +502,179 @@ class ChatGPTAuthManager(
             throw IllegalStateException("Geen live OpenAI model beschikbaar. Enkel de nieuwste dynamische modellen van OpenAI zijn toegestaan (geen fallback).")
         }
 
-        val payload = JSONObject().apply {
-            put("model", effectiveModel)
-            put("instructions", systemInstructions)
-            put("input", inputList)
-            put("stream", true)
-            put("store", false)
-            if (toolsArray.length() > 0) {
-                put("tools", toolsArray)
-                put("parallel_tool_calls", false)
-            }
-            if (!reasoningEffort.isNullOrBlank()) {
-                put("reasoning", JSONObject().put("effort", reasoningEffort))
-            }
-        }
-
-        val request = Request.Builder()
-            .url(url)
-            .post(payload.toString().toRequestBody("application/json".toMediaType()))
-            .apply {
-                headers.forEach { (k, v) -> header(k, v) }
-                header("Content-Type", "application/json")
-                header("Accept", "text/event-stream")
-            }
-            .build()
-
-        val streamId = "stream_${System.currentTimeMillis()}"
-        val call = okHttpClient.newCall(request)
-        activeStreams[streamId] = call
-
         val accumulatedText = StringBuilder()
-        val inFlightFunctionCalls = mutableMapOf<String, Pair<String, StringBuilder>>()
-        val completedToolBlocks = mutableSetOf<String>()
+        var currentInput = inputList
+        var turn = 0
+        val maxTurns = 4
 
-        try {
-            val response = call.execute()
-            if (!response.isSuccessful) {
-                val errBody = response.body?.string() ?: ""
-                throw IOException("ChatGPT API Fout (${response.code}): $errBody")
+        while (turn < maxTurns) {
+            turn++
+            var functionCallEncountered: Pair<String, Pair<String, String>>? = null // callId -> (name, args)
+
+            val payload = JSONObject().apply {
+                put("model", effectiveModel)
+                put("instructions", systemInstructions)
+                put("input", currentInput)
+                put("stream", true)
+                put("store", false)
+                if (toolsArray.length() > 0) {
+                    put("tools", toolsArray)
+                    put("parallel_tool_calls", false)
+                }
+                if (!reasoningEffort.isNullOrBlank()) {
+                    put("reasoning", JSONObject().put("effort", reasoningEffort))
+                }
             }
 
-            val source = response.body?.source() ?: throw IOException("Lege respons stream van ChatGPT API")
-            var line: String? = null
+            val request = Request.Builder()
+                .url(url)
+                .post(payload.toString().toRequestBody("application/json".toMediaType()))
+                .apply {
+                    headers.forEach { (k, v) -> header(k, v) }
+                    header("Content-Type", "application/json")
+                    header("Accept", "text/event-stream")
+                }
+                .build()
 
-            while (source.readUtf8Line().also { line = it } != null) {
-                val currentLine = line?.trim() ?: continue
-                if (currentLine.startsWith("data: ")) {
-                    val dataStr = currentLine.substring(6).trim()
-                    if (dataStr == "[DONE]") break
+            val streamId = "stream_${System.currentTimeMillis()}_$turn"
+            val call = okHttpClient.newCall(request)
+            activeStreams[streamId] = call
 
-                    try {
-                        val event = JSONObject(dataStr)
-                        val type = event.optString("type")
+            val inFlightFunctionCalls = mutableMapOf<String, Pair<String, StringBuilder>>()
 
-                        if (type == "response.output_text.delta" || type == "response.refusal.delta") {
-                            val delta = event.optString("delta", "")
-                            if (delta.isNotEmpty()) {
-                                accumulatedText.append(delta)
-                                onChunk(delta)
-                                onStatus("Antwoord genereren...")
-                            }
-                        } else if (type == "response.output_item.added") {
-                            val item = event.optJSONObject("item")
-                            if (item != null && item.optString("type") == "function_call") {
-                                val callId = item.optString("call_id", item.optString("id", "call_${System.currentTimeMillis()}"))
-                                val name = item.optString("name")
-                                inFlightFunctionCalls[callId] = Pair(name, StringBuilder())
-                                onStatus("Tool uitvoeren: $name...")
-                            }
-                        } else if (type == "response.function_call_arguments.delta") {
-                            val callId = event.optString("call_id", inFlightFunctionCalls.keys.lastOrNull() ?: "")
-                            val delta = event.optString("delta", "")
-                            inFlightFunctionCalls[callId]?.second?.append(delta)
-                        } else if (type == "response.function_call_arguments.done" || type == "response.output_item.done") {
-                            val item = event.optJSONObject("item")
-                            val callId = event.optString("call_id", item?.optString("call_id", item?.optString("id", "")) ?: "")
-                            val name = item?.optString("name") ?: inFlightFunctionCalls[callId]?.first ?: ""
-                            val args = item?.optString("arguments") ?: inFlightFunctionCalls[callId]?.second?.toString() ?: "{}"
-                            if (name.isNotBlank()) {
-                                val key = "$callId:$name:$args"
-                                if (!completedToolBlocks.contains(key)) {
-                                    completedToolBlocks.add(key)
-                                    val parsedArgs = try {
-                                        if (args.isNotBlank()) JSONObject(args) else JSONObject()
-                                    } catch (_: Exception) {
-                                        JSONObject()
-                                    }
+            try {
+                val response = call.execute()
+                if (!response.isSuccessful) {
+                    val errBody = response.body?.string() ?: ""
+                    throw IOException("ChatGPT API Fout (${response.code}): $errBody")
+                }
 
-                                    if (onToolCall != null) {
-                                        onStatus("⚡ Uitvoeren van $name op Android...")
-                                        val output = onToolCall(name, parsedArgs)
-                                        accumulatedText.append(output)
-                                        onChunk(output)
-                                        onStatus("Tool '$name' voltooid")
-                                    } else {
-                                        val block = formatFunctionCallToToolBlock(name, args)
-                                        accumulatedText.append("\n\n").append(block).append("\n")
-                                        onChunk("\n\n$block\n")
-                                    }
+                val source = response.body?.source() ?: throw IOException("Lege respons stream van ChatGPT API")
+                var line: String? = null
+
+                while (source.readUtf8Line().also { line = it } != null) {
+                    val currentLine = line?.trim() ?: continue
+                    if (currentLine.startsWith("data: ")) {
+                        val dataStr = currentLine.substring(6).trim()
+                        if (dataStr == "[DONE]") break
+
+                        try {
+                            val event = JSONObject(dataStr)
+                            val type = event.optString("type")
+
+                            if (type == "response.output_text.delta" || type == "response.refusal.delta") {
+                                val delta = event.optString("delta", "")
+                                if (delta.isNotEmpty()) {
+                                    accumulatedText.append(delta)
+                                    onChunk(delta)
+                                    onStatus("Antwoord genereren...")
                                 }
-                            }
-                        } else if (type == "response.created" || type == "response.in_progress" || type.startsWith("response.reasoning")) {
-                            onStatus("Nadenken...")
-                        } else if (type == "response.completed") {
-                            val respObj = event.optJSONObject("response")
-                            val outputArr = respObj?.optJSONArray("output")
-                            if (outputArr != null) {
-                                for (i in 0 until outputArr.length()) {
-                                    val item = outputArr.getJSONObject(i)
-                                    val itemType = item.optString("type")
-                                    if (itemType == "function_call") {
-                                        val name = item.optString("name")
-                                        val args = item.optString("arguments")
-                                        val callId = item.optString("call_id", "call_$i")
-                                        val key = "$callId:$name:$args"
-                                        if (name.isNotBlank() && !completedToolBlocks.contains(key)) {
-                                            completedToolBlocks.add(key)
-                                            val parsedArgs = try {
-                                                if (args.isNotBlank()) JSONObject(args) else JSONObject()
-                                            } catch (_: Exception) {
-                                                JSONObject()
+                            } else if (type == "response.output_item.added") {
+                                val item = event.optJSONObject("item")
+                                if (item != null && item.optString("type") == "function_call") {
+                                    val callId = item.optString("call_id", item.optString("id", "call_${System.currentTimeMillis()}"))
+                                    val name = item.optString("name")
+                                    inFlightFunctionCalls[callId] = Pair(name, StringBuilder())
+                                    onStatus("Tool '$name' gedetecteerd...")
+                                }
+                            } else if (type == "response.function_call_arguments.delta") {
+                                val callId = event.optString("call_id", inFlightFunctionCalls.keys.lastOrNull() ?: "")
+                                val delta = event.optString("delta", "")
+                                inFlightFunctionCalls[callId]?.second?.append(delta)
+                            } else if (type == "response.function_call_arguments.done" || type == "response.output_item.done") {
+                                val item = event.optJSONObject("item")
+                                val callId = event.optString("call_id", item?.optString("call_id", item?.optString("id", "")) ?: "")
+                                val name = item?.optString("name") ?: inFlightFunctionCalls[callId]?.first ?: ""
+                                val args = item?.optString("arguments") ?: inFlightFunctionCalls[callId]?.second?.toString() ?: "{}"
+                                if (name.isNotBlank()) {
+                                    functionCallEncountered = Pair(callId, Pair(name, args))
+                                }
+                            } else if (type == "response.created" || type == "response.in_progress" || type.startsWith("response.reasoning")) {
+                                onStatus("Nadenken...")
+                            } else if (type == "response.completed") {
+                                val respObj = event.optJSONObject("response")
+                                val outputArr = respObj?.optJSONArray("output")
+                                if (outputArr != null) {
+                                    for (i in 0 until outputArr.length()) {
+                                        val item = outputArr.getJSONObject(i)
+                                        val itemType = item.optString("type")
+                                        if (itemType == "function_call") {
+                                            val name = item.optString("name")
+                                            val args = item.optString("arguments")
+                                            val callId = item.optString("call_id", "call_$i")
+                                            if (name.isNotBlank()) {
+                                                functionCallEncountered = Pair(callId, Pair(name, args))
                                             }
-
-                                            if (onToolCall != null) {
-                                                onStatus("⚡ Uitvoeren van $name op Android...")
-                                                val output = onToolCall(name, parsedArgs)
-                                                accumulatedText.append(output)
-                                                onChunk(output)
-                                                onStatus("Tool '$name' voltooid")
-                                            } else {
-                                                val block = formatFunctionCallToToolBlock(name, args)
-                                                accumulatedText.append("\n\n").append(block).append("\n")
-                                                onChunk("\n\n$block\n")
-                                            }
-                                        }
-                                    } else {
-                                        val content = item.optJSONArray("content")
-                                        if (content != null && accumulatedText.isEmpty()) {
-                                            for (j in 0 until content.length()) {
-                                                val c = content.getJSONObject(j)
-                                                if (c.optString("type") == "output_text") {
-                                                    val text = c.optString("text")
-                                                    accumulatedText.append(text)
-                                                    onChunk(text)
+                                        } else {
+                                            val content = item.optJSONArray("content")
+                                            if (content != null && accumulatedText.isEmpty()) {
+                                                for (j in 0 until content.length()) {
+                                                    val c = content.getJSONObject(j)
+                                                    if (c.optString("type") == "output_text") {
+                                                        val text = c.optString("text")
+                                                        accumulatedText.append(text)
+                                                        onChunk(text)
+                                                    }
                                                 }
                                             }
                                         }
                                     }
                                 }
+                            } else if (type == "error" || type == "response.failed") {
+                                val err = event.optJSONObject("error")?.optString("message") ?: "Stream fout"
+                                throw IOException(err)
                             }
-                        } else if (type == "error" || type == "response.failed") {
-                            val err = event.optJSONObject("error")?.optString("message") ?: "Stream fout"
-                            throw IOException(err)
-                        }
-                    } catch (_: Exception) {}
+                        } catch (_: Exception) {}
+                    }
                 }
+            } finally {
+                activeStreams.remove(streamId)
             }
-        } finally {
-            activeStreams.remove(streamId)
+
+            if (functionCallEncountered != null && toolDispatcher != null) {
+                val (callId, pair) = functionCallEncountered
+                val (name, args) = pair
+                val parsedArgs = try {
+                    if (args.isNotBlank()) JSONObject(args) else JSONObject()
+                } catch (_: Exception) {
+                    JSONObject()
+                }
+
+                onStatus("⚡ Dispatcher: '$name' uitvoeren op Android...")
+                val dispatchResult = toolDispatcher.dispatchTool(callId = callId, toolName = name, parameters = parsedArgs)
+
+                // Tool visualisatie in UI stream
+                val toolCallBlock = "\n\n```tool_call\n{\n  \"action\": \"execute_tool\",\n  \"tool_name\": \"$name\",\n  \"parameters\": $parsedArgs\n}\n```\n\n```tool_result\n${dispatchResult.outputJson}\n```\n\n${dispatchResult.uiMarkdown}\n\n"
+                accumulatedText.append(toolCallBlock)
+                onChunk(toolCallBlock)
+
+                onStatus("Resultaat terugsturen naar OpenAI model...")
+
+                // Resultaat terugsturen naar het OpenAI model in het input array
+                val nextInput = JSONArray()
+                for (k in 0 until currentInput.length()) {
+                    nextInput.put(currentInput.get(k))
+                }
+                // 1. De function call van de assistent
+                nextInput.put(JSONObject().apply {
+                    put("type", "function_call")
+                    put("call_id", callId)
+                    put("name", name)
+                    put("arguments", args)
+                })
+                // 2. Het feitelijke Android tool output resultaat
+                nextInput.put(JSONObject().apply {
+                    put("type", "function_call_output")
+                    put("call_id", callId)
+                    put("output", dispatchResult.outputJson)
+                })
+
+                currentInput = nextInput
+                // Volgende beurt: OpenAI verwerkt het tool resultaat en genereert de finale menselijke synthese
+            } else {
+                // Geen function calls meer; definitieve respons voltooid
+                break
+            }
         }
 
         return@withContext accumulatedText.toString()

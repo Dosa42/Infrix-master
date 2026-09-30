@@ -523,6 +523,7 @@ class DashboardViewModel(private val repository: AppRepository) : ViewModel() {
     val chatGPTModels: StateFlow<List<com.example.data.auth.ChatGPTModelInfo>> = repository.chatGPTModels
     val activeChatGPTModel: StateFlow<String> = repository.activeChatGPTModel
     val selectedReasoningEffort: StateFlow<String?> = repository.selectedReasoningEffort
+    val hostedSandboxClient: com.example.data.backend.HostedSandboxClient = repository.hostedSandboxClient
 
     fun setActiveModel(modelId: String) {
         repository.setActiveChatGPTModel(modelId)
