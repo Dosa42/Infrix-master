@@ -22,6 +22,6 @@ dependencyResolutionManagement {
   }
 }
 
-rootProject.name = "RoleVault"
+rootProject.name = "infrix-mobile"
 
 include(":app")

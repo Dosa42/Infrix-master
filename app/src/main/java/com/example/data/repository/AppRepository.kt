@@ -1,6 +1,7 @@
 package com.example.data.repository
 
 import android.content.Context
+import androidx.room.withTransaction
 import com.example.data.ai.AIHarnessCategory
 import com.example.data.ai.AIHarnessEngine
 import com.example.data.ai.HarnessPromptConfiguration
@@ -574,15 +575,25 @@ class AppRepository(
             )
         }
 
-        userDao.deleteUser(user)
-        auditLogDao.insertLog(
-            SecurityManager.createAuditLog(
-                actor,
-                "USER_DELETED",
-                "Account '${user.username}' permanent verwijderd door beheerder.",
-                "WARNING"
+        database.withTransaction {
+            val username = user.username
+            userDao.deleteUser(user)
+            // Cascading referential cleanup
+            workLogDao.deleteWorkLogsByWorker(username)
+            planningDao.deleteTasksByWorker(username)
+            planningDao.deleteTasksByClient(username)
+            serviceRequestDao.deleteRequestsByClient(username)
+            calendarDao.deleteEventsByWorker(username)
+            calendarDao.deleteEventsByClient(username)
+            auditLogDao.insertLog(
+                SecurityManager.createAuditLog(
+                    actor,
+                    "USER_DELETED",
+                    "Account '${user.username}' en alle gerelateerde taken, logs, afspraken en aanvragen permanent verwijderd (cascading referential integrity).",
+                    "WARNING"
+                )
             )
-        )
+        }
         SecurityResult.Success(Unit)
     }
 
@@ -591,16 +602,19 @@ class AppRepository(
         val guard = SecurityManager.checkPermission(actor, UserRole.ADMIN, "Taak permanent verwijderen")
         if (guard is SecurityResult.Denied) return@withContext guard
 
-        planningDao.deleteTask(task)
-        calendarDao.deleteEventByTaskId(task.id)
-        auditLogDao.insertLog(
-            SecurityManager.createAuditLog(
-                actor,
-                "TASK_DELETED",
-                "Planningstaak '${task.title}' verwijderd (inclusief gekoppelde kalender-afspraak).",
-                "INFO"
+        database.withTransaction {
+            planningDao.deleteTask(task)
+            workLogDao.deleteWorkLogsByTaskId(task.id)
+            calendarDao.deleteEventByTaskId(task.id)
+            auditLogDao.insertLog(
+                SecurityManager.createAuditLog(
+                    actor,
+                    "TASK_DELETED",
+                    "Planningstaak '${task.title}' verwijderd (inclusief gekoppelde werkuren-logs en kalender-afspraak).",
+                    "INFO"
+                )
             )
-        )
+        }
         SecurityResult.Success(Unit)
     }
 
@@ -610,22 +624,25 @@ class AppRepository(
         val guard = SecurityManager.checkPermission(actor, UserRole.WERKER, "Planningstaak aanmaken")
         if (guard is SecurityResult.Denied) return@withContext guard
 
-        val id = planningDao.insertTask(task)
-        val createdTask = task.copy(id = id)
+        val taskId = database.withTransaction {
+            val id = planningDao.insertTask(task)
+            val createdTask = task.copy(id = id)
 
-        // Automatische Default Synchronisatie met Backend Kalender
-        val calendarEvent = calendarBackendService.syncPlanningTaskToCalendar(createdTask)
-        calendarDao.insertEvent(calendarEvent)
+            // Automatische Default Synchronisatie met Backend Kalender
+            val calendarEvent = calendarBackendService.syncPlanningTaskToCalendar(createdTask)
+            calendarDao.insertEvent(calendarEvent)
 
-        auditLogDao.insertLog(
-            SecurityManager.createAuditLog(
-                actor,
-                "TASK_CREATED",
-                "Planningstaak '${task.title}' aangemaakt voor werker '${task.assignedWorkerUsername}' en automatisch synchroon in de kalender geplaatst.",
-                "INFO"
+            auditLogDao.insertLog(
+                SecurityManager.createAuditLog(
+                    actor,
+                    "TASK_CREATED",
+                    "Planningstaak '${task.title}' aangemaakt voor werker '${task.assignedWorkerUsername}' en automatisch synchroon in de kalender geplaatst.",
+                    "INFO"
+                )
             )
-        )
-        SecurityResult.Success(id)
+            id
+        }
+        SecurityResult.Success(taskId)
     }
 
     suspend fun updateTaskStatus(
@@ -658,34 +675,36 @@ class AppRepository(
             else -> "In planning"
         }
 
-        val updated = existing.copy(
-            status = newStatus,
-            clientVisibleStatus = clientFriendly,
-            actualHours = actualHours ?: existing.actualHours,
-            internalNotes = notes ?: existing.internalNotes,
-            updatedAt = System.currentTimeMillis()
-        )
-        planningDao.updateTask(updated)
-
-        // Kalender event synchroniseren
-        val existingEvent = calendarDao.getEventByTaskId(taskId)
-        if (existingEvent != null) {
-            val updatedEvent = existingEvent.copy(
-                description = "${updated.description}\n\nStatus: ${updated.status}\nGeschatte uren: ${updated.estimatedHours}u",
-                priority = updated.priority,
+        database.withTransaction {
+            val updated = existing.copy(
+                status = newStatus,
+                clientVisibleStatus = clientFriendly,
+                actualHours = actualHours ?: existing.actualHours,
+                internalNotes = notes ?: existing.internalNotes,
                 updatedAt = System.currentTimeMillis()
             )
-            calendarDao.updateEvent(updatedEvent)
-        }
+            planningDao.updateTask(updated)
 
-        auditLogDao.insertLog(
-            SecurityManager.createAuditLog(
-                actor,
-                "TASK_STATUS_UPDATED",
-                "Taak '${updated.title}' gewijzigd naar '$newStatus' en kalender bijgewerkt.",
-                "INFO"
+            // Kalender event synchroniseren
+            val existingEvent = calendarDao.getEventByTaskId(taskId)
+            if (existingEvent != null) {
+                val updatedEvent = existingEvent.copy(
+                    description = "${updated.description}\n\nStatus: ${updated.status}\nGeschatte uren: ${updated.estimatedHours}u",
+                    priority = updated.priority,
+                    updatedAt = System.currentTimeMillis()
+                )
+                calendarDao.updateEvent(updatedEvent)
+            }
+
+            auditLogDao.insertLog(
+                SecurityManager.createAuditLog(
+                    actor,
+                    "TASK_STATUS_UPDATED",
+                    "Taak '${updated.title}' gewijzigd naar '$newStatus' en kalender bijgewerkt.",
+                    "INFO"
+                )
             )
-        )
+        }
         SecurityResult.Success(Unit)
     }
 
@@ -708,30 +727,33 @@ class AppRepository(
             )
         }
 
-        val log = WorkLogEntity(
-            taskId = taskId,
-            taskTitle = taskTitle,
-            workerUsername = actor?.username ?: "onbekend",
-            workerName = actor?.fullName ?: "Onbekende werker",
-            hoursSpent = hours,
-            activityDescription = activity
-        )
-        val id = workLogDao.insertWorkLog(log)
-
-        val task = planningDao.getTaskById(taskId)
-        if (task != null) {
-            planningDao.updateTask(task.copy(actualHours = task.actualHours + hours, updatedAt = System.currentTimeMillis()))
-        }
-
-        auditLogDao.insertLog(
-            SecurityManager.createAuditLog(
-                actor,
-                "HOURS_LOGGED",
-                "$hours uur geregistreerd voor taak '$taskTitle'.",
-                "INFO"
+        val logId = database.withTransaction {
+            val log = WorkLogEntity(
+                taskId = taskId,
+                taskTitle = taskTitle,
+                workerUsername = actor?.username ?: "onbekend",
+                workerName = actor?.fullName ?: "Onbekende werker",
+                hoursSpent = hours,
+                activityDescription = activity
             )
-        )
-        SecurityResult.Success(id)
+            val id = workLogDao.insertWorkLog(log)
+
+            val task = planningDao.getTaskById(taskId)
+            if (task != null) {
+                planningDao.updateTask(task.copy(actualHours = task.actualHours + hours, updatedAt = System.currentTimeMillis()))
+            }
+
+            auditLogDao.insertLog(
+                SecurityManager.createAuditLog(
+                    actor,
+                    "HOURS_LOGGED",
+                    "$hours uur geregistreerd voor taak '$taskTitle'.",
+                    "INFO"
+                )
+            )
+            id
+        }
+        SecurityResult.Success(logId)
     }
 
     // Client aanvragen met Default Kalender Synchronisatie
@@ -753,31 +775,34 @@ class AppRepository(
             )
         }
 
-        val request = ServiceRequestEntity(
-            clientUsername = actor.username,
-            clientName = actor.fullName,
-            title = title.trim(),
-            description = description.trim(),
-            preferredDate = preferredDate.trim(),
-            urgency = urgency,
-            status = "Nieuw ingediend"
-        )
-        val id = serviceRequestDao.insertRequest(request)
-        val createdRequest = request.copy(id = id)
-
-        // Automatisch als kalender-item synchroon inschieten
-        val calendarEvent = calendarBackendService.syncServiceRequestToCalendar(createdRequest)
-        calendarDao.insertEvent(calendarEvent)
-
-        auditLogDao.insertLog(
-            SecurityManager.createAuditLog(
-                actor,
-                "REQUEST_SUBMITTED",
-                "Klant '${actor.username}' heeft serviceaanvraag '$title' ingediend en gesynchroniseerd in de kalender.",
-                "INFO"
+        val requestId = database.withTransaction {
+            val request = ServiceRequestEntity(
+                clientUsername = actor.username,
+                clientName = actor.fullName,
+                title = title.trim(),
+                description = description.trim(),
+                preferredDate = preferredDate.trim(),
+                urgency = urgency,
+                status = "Nieuw ingediend"
             )
-        )
-        SecurityResult.Success(id)
+            val id = serviceRequestDao.insertRequest(request)
+            val createdRequest = request.copy(id = id)
+
+            // Automatisch als kalender-item synchroon inschieten
+            val calendarEvent = calendarBackendService.syncServiceRequestToCalendar(createdRequest)
+            calendarDao.insertEvent(calendarEvent)
+
+            auditLogDao.insertLog(
+                SecurityManager.createAuditLog(
+                    actor,
+                    "REQUEST_SUBMITTED",
+                    "Klant '${actor.username}' heeft serviceaanvraag '$title' ingediend en gesynchroniseerd in de kalender.",
+                    "INFO"
+                )
+            )
+            id
+        }
+        SecurityResult.Success(requestId)
     }
 
     suspend fun updateRequestStatus(

@@ -530,7 +530,7 @@ class AndroidAIToolDispatcher(
     }
 
     private fun executeTriggerToast(callId: String, params: JSONObject): ToolDispatchResult {
-        val msg = params.optString("message", "Melding van RoleVault AI")
+        val msg = params.optString("message", "Melding van infrix-mobile AI")
         Handler(Looper.getMainLooper()).post {
             Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
         }

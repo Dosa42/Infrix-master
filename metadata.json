@@ -1,5 +1,5 @@
 {
-  "name": "RoleVault",
+  "name": "infrix-mobile",
   "description": "Beveiligde multi-rol bedrijfsapplicatie met rolhiërarchie voor Admin, Werker en Klant.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]

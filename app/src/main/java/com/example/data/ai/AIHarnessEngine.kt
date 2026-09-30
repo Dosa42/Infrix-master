@@ -51,7 +51,7 @@ class AIHarnessEngine {
 
     // Kennisbasis beheerd door Admin AI Brug
     private var customerFaqKnowledge: String = """
-        - Bedrijfsnaam: RoleVault Diensten & Techniek
+        - Bedrijfsnaam: infrix-mobile Diensten & Techniek
         - Openingstijden: Maandag t/m Vrijdag 08:00 - 18:00
         - Werkgebied: Heel Nederland en Vlaanderen
         - Spoedgevallen: 24/7 bereikbaar via spoedknop in het portaal
@@ -105,7 +105,7 @@ class AIHarnessEngine {
                 }
 
                 val systemPrompt = """
-                    Je bent de Klantenservice AI van RoleVault, toegewezen aan klant '$clientName'.
+                    Je bent de Klantenservice AI van infrix-mobile, toegewezen aan klant '$clientName'.
                     
                     STRIKTE VEILIGHEIDS- EN PRIVACYREGELS:
                     1. Je mag UITSLUITEND vragen beantwoorden over de diensten van het bedrijf, algemene productinformatie, en de status van de EIGEN aanvragen van deze specifieke klant.
@@ -200,7 +200,7 @@ class AIHarnessEngine {
                 val adminName = currentUser?.username ?: "Infrix-dev"
 
                 val systemPrompt = """
-                    Je bent de Admin Master AI van RoleVault voor hoofdbeheerder '$adminName'.
+                    Je bent de Admin Master AI van infrix-mobile voor hoofdbeheerder '$adminName'.
                     
                     AUTONOME TOOL-UITVOERING & HOSTED CAPABILITIES:
                     1. Je beschikt over echte executie-omgevingen:

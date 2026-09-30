@@ -415,14 +415,20 @@ class DashboardViewModel(private val repository: AppRepository) : ViewModel() {
     // 5. Server Side Storage & Cloud Sync
     fun exportCompleteDatabaseJson(onComplete: (String) -> Unit) {
         viewModelScope.launch {
-            val json = repository.serverStorageManager.generateServerBackupPayload()
+            val actor = currentUser.value?.username ?: "Infrix-dev"
+            val json = repository.serverStorageManager.generateServerBackupPayload(currentActor = actor)
             onComplete(json)
         }
     }
 
     fun syncDatabaseToServer(endpoint: String, onComplete: (com.example.data.backend.CloudSyncStatus) -> Unit) {
         viewModelScope.launch {
-            val status = repository.serverStorageManager.syncToServerEndpoint(endpoint)
+            val actor = currentUser.value
+            val status = repository.serverStorageManager.syncToServerEndpoint(
+                endpointUrl = endpoint,
+                actorUsername = actor?.username ?: "Infrix-dev",
+                actorRole = actor?.role?.name ?: "ADMIN"
+            )
             onComplete(status)
         }
     }

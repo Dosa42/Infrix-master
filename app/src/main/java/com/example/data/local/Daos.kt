@@ -56,6 +56,15 @@ interface PlanningDao {
 
     @Delete
     suspend fun deleteTask(task: PlanningTaskEntity)
+
+    @Query("DELETE FROM planning_tasks WHERE id = :id")
+    suspend fun deleteTaskById(id: Long): Int
+
+    @Query("DELETE FROM planning_tasks WHERE LOWER(assignedWorkerUsername) = LOWER(:workerUsername)")
+    suspend fun deleteTasksByWorker(workerUsername: String): Int
+
+    @Query("DELETE FROM planning_tasks WHERE LOWER(clientUsername) = LOWER(:clientUsername)")
+    suspend fun deleteTasksByClient(clientUsername: String): Int
 }
 
 @Dao
@@ -66,8 +75,17 @@ interface WorkLogDao {
     @Query("SELECT * FROM work_logs WHERE LOWER(workerUsername) = LOWER(:workerUsername) ORDER BY loggedAt DESC")
     fun getWorkLogsForWorker(workerUsername: String): Flow<List<WorkLogEntity>>
 
+    @Query("SELECT * FROM work_logs WHERE taskId = :taskId ORDER BY loggedAt DESC")
+    fun getWorkLogsForTask(taskId: Long): Flow<List<WorkLogEntity>>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertWorkLog(log: WorkLogEntity): Long
+
+    @Query("DELETE FROM work_logs WHERE taskId = :taskId")
+    suspend fun deleteWorkLogsByTaskId(taskId: Long): Int
+
+    @Query("DELETE FROM work_logs WHERE LOWER(workerUsername) = LOWER(:workerUsername)")
+    suspend fun deleteWorkLogsByWorker(workerUsername: String): Int
 }
 
 @Dao
@@ -86,6 +104,12 @@ interface ServiceRequestDao {
 
     @Query("UPDATE service_requests SET status = :status WHERE id = :id")
     suspend fun updateRequestStatus(id: Long, status: String)
+
+    @Query("DELETE FROM service_requests WHERE id = :id")
+    suspend fun deleteRequestById(id: Long): Int
+
+    @Query("DELETE FROM service_requests WHERE LOWER(clientUsername) = LOWER(:clientUsername)")
+    suspend fun deleteRequestsByClient(clientUsername: String): Int
 }
 
 @Dao
@@ -140,6 +164,15 @@ interface CalendarDao {
 
     @Query("DELETE FROM calendar_events WHERE relatedTaskId = :taskId")
     suspend fun deleteEventByTaskId(taskId: Long)
+
+    @Query("DELETE FROM calendar_events WHERE relatedRequestId = :requestId")
+    suspend fun deleteEventByRequestId(requestId: Long)
+
+    @Query("DELETE FROM calendar_events WHERE LOWER(workerUsername) = LOWER(:workerUsername)")
+    suspend fun deleteEventsByWorker(workerUsername: String): Int
+
+    @Query("DELETE FROM calendar_events WHERE LOWER(clientUsername) = LOWER(:clientUsername)")
+    suspend fun deleteEventsByClient(clientUsername: String): Int
 
     @Query("DELETE FROM calendar_events")
     suspend fun clearAllEvents()

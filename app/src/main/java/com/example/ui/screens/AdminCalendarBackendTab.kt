@@ -525,7 +525,7 @@ fun AdminCalendarBackendTab(
                         try {
                             val sendIntent = Intent(Intent.ACTION_SEND).apply {
                                 type = "text/calendar"
-                                putExtra(Intent.EXTRA_SUBJECT, "RoleVault Agenda Export.ics")
+                                putExtra(Intent.EXTRA_SUBJECT, "infrix-mobile Agenda Export.ics")
                                 putExtra(Intent.EXTRA_TEXT, ics)
                             }
                             context.startActivity(Intent.createChooser(sendIntent, "Deel of exporteer .ICS kalender"))

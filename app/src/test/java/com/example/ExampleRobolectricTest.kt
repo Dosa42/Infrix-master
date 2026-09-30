@@ -41,7 +41,7 @@ class ExampleRobolectricTest {
     @Test
     fun `read string from context`() {
         val appName = context.getString(R.string.app_name)
-        assertEquals("RoleVault", appName)
+        assertEquals("infrix-mobile", appName)
     }
 
     @Test
@@ -168,7 +168,7 @@ class ExampleRobolectricTest {
         assertEquals(0, config.tools.length()) // Klanten hebben geen tools
         assertTrue("Prompt moet eigen aanvraag bevatten", config.systemPrompt.contains("Aanvraag #101"))
         assertFalse("Prompt mag GEEN aanvraag van andere klanten bevatten", config.systemPrompt.contains("Privé aanvraag"))
-        assertTrue("Prompt moet goedgekeurde FAQ bevatten", config.systemPrompt.contains("RoleVault Diensten & Techniek"))
+        assertTrue("Prompt moet goedgekeurde FAQ bevatten", config.systemPrompt.contains("infrix-mobile Diensten & Techniek"))
     }
 
     @Test
