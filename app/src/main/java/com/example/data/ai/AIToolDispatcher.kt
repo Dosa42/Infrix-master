@@ -61,7 +61,7 @@ class AndroidAIToolDispatcher(
         try {
             when (toolName) {
                 // HOSTED LINUX, JAVA & CHROME DEVTOOLS SANDBOX
-                "sandbox_bash_exec" -> executeSandboxBash(callId, parameters)
+                "exec", "bash", "execute_command", "shell_exec", "sandbox_bash_exec" -> executeSandboxBash(callId, toolName, parameters)
                 "sandbox_java_run" -> executeSandboxJava(callId, parameters)
                 "sandbox_chrome_devtools" -> executeSandboxChromeDevTools(callId, parameters)
                 "sandbox_playwright_run" -> executeSandboxPlaywright(callId, parameters)
@@ -581,18 +581,13 @@ class AndroidAIToolDispatcher(
     // HOSTED LINUX, JAVA & CDP SANDBOX EXECUTORS
     // ==========================================
 
-    private suspend fun executeSandboxBash(callId: String, params: JSONObject): ToolDispatchResult {
-        val command = params.optString("command", "").trim()
-        if (command.isBlank()) {
-            return ToolDispatchResult(
-                toolName = "sandbox_bash_exec",
-                callId = callId,
-                success = false,
-                outputJson = JSONObject().put("error", "Geen commando opgegeven").toString(),
-                summary = "Bash commando leeg",
-                uiMarkdown = "⚠️ Fout: Geen bash commando opgegeven."
-            )
-        }
+    private suspend fun executeSandboxBash(
+        callId: String,
+        toolName: String = "exec",
+        params: JSONObject
+    ): ToolDispatchResult {
+        val rawCommand = params.optString("command", params.optString("cmd", params.optString("script", ""))).trim()
+        val command = if (rawCommand.isNotBlank()) rawCommand else "uname -a && uptime"
 
         val res = hostedSandboxClient.executeBash(command)
         val data = JSONObject().apply {
@@ -605,7 +600,7 @@ class AndroidAIToolDispatcher(
         }
 
         val md = buildString {
-            append("### 💻 Hosted Linux Container: Bash Execution (`${hostedSandboxClient.capabilities.value.containerId}`)\n")
+            append("### 💻 Live Termux / Exec Server: Shell Execution (`${hostedSandboxClient.capabilities.value.containerId}`)\n")
             append("```bash\n$ $command\n```\n")
             if (res.stdout.isNotBlank()) {
                 append("**Stdout:**\n```\n${res.stdout.trim()}\n```\n")
@@ -617,11 +612,11 @@ class AndroidAIToolDispatcher(
         }
 
         return ToolDispatchResult(
-            toolName = "sandbox_bash_exec",
+            toolName = toolName,
             callId = callId,
             success = res.exitCode == 0,
             outputJson = data.toString(),
-            summary = "Bash '$command' uitgevoerd met exit code ${res.exitCode} (${res.executionTimeMs}ms).",
+            summary = "Exec '$command' uitgevoerd met exit code ${res.exitCode} (${res.executionTimeMs}ms).",
             uiMarkdown = md
         )
     }

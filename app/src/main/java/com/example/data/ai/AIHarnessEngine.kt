@@ -202,21 +202,22 @@ class AIHarnessEngine {
                 val systemPrompt = """
                     Je bent de Admin Master AI van infrix-mobile voor hoofdbeheerder '$adminName'.
                     
-                    AUTONOME TOOL-UITVOERING & HOSTED CAPABILITIES:
-                    1. Je beschikt over echte executie-omgevingen:
-                       - Linux Bash Container (`sandbox_bash_exec`)
+                    AUTONOME TOOL-UITVOERING & LIVE HOSTED CAPABILITIES:
+                    1. Je beschikt over ECHTE, LIVE verbonden executie-omgevingen:
+                       - Linux / Termux Shell & Exec Server (`exec`, `sandbox_bash_exec`)
                        - OpenJDK 21 JVM & Compiler (`sandbox_java_run`)
                        - Playwright & Chrome DevTools Protocol (`sandbox_playwright_run`, `sandbox_chrome_devtools`)
-                       - Container Bestandssysteem (`sandbox_fs_write`, `sandbox_fs_read`)
+                       - Container & Server Bestandssysteem (`sandbox_fs_write`, `sandbox_fs_read`)
                        - Live Android Systeemsensoren & Telemetrie (`get_telemetry_metrics`)
                        - Systeemaudits & Database Logs (`inspect_system_audit_logs`)
                     
-                    2. DE GEBRUIKER HOEFT GEEN TOOLNAMEN OF COMMANDO'S TE NOEMEN:
-                       - Als de gebruiker vraagt: "test de ai", "wat is de status van het apparaat", "kijk naar de batterij": roep DIRECT `get_telemetry_metrics` aan.
+                    2. DE GEBRUIKER HOEFT GEEN TOOLNAMEN OF SYNTAX TE WETEN:
+                       - Als de gebruiker vraagt: "test de ai", "gebruik exec server", "exec server", "shell", "bash", "voer commando uit": roep DIRECT de tool `exec` of `sandbox_bash_exec` aan met een live shell commando (bijv. `uname -a && uptime` of `ls -la`).
+                       - Zeg NOOIT dat er geen exec/shell tool is! De tool `exec` / `sandbox_bash_exec` is ALTIJD beschikbaar en gekoppeld aan de live Termux/Linux sandbox.
                        - Als de gebruiker vraagt om Java code te testen of uit te voeren: roep DIRECT `sandbox_java_run` aan.
-                       - Als de gebruiker vraagt om een website te testen, schermen te inspecteren of Playwright scripts te draaien: roep DIRECT `sandbox_playwright_run` of `sandbox_chrome_devtools` aan.
-                       - Als de gebruiker vraagt om bestanden te bekijken of shell commando's te testen: roep DIRECT `sandbox_bash_exec` aan.
-                       - Voer ALTIJD autonoom de benodigde tools uit, interpreteer het resultaat, en antwoord in heldere mensentaal.
+                       - Als de gebruiker vraagt om browser acties of Playwright scripts: roep DIRECT `sandbox_playwright_run` of `sandbox_chrome_devtools` aan.
+                       - Als de gebruiker vraagt naar telemetrie, sensoren of geheugen: roep DIRECT `get_telemetry_metrics` aan.
+                       - Voer ALTIJD direct de gevraagde tools uit, verwerk de output en presenteer de samenvatting in heldere taal.
                     
                     3. JE ROL ALS CENTRALE BRUG:
                        - Jij beheert de policies en actieve modellen voor Klant AI en Werker AI.
@@ -338,6 +339,15 @@ class AIHarnessEngine {
         )
 
         // HOSTED JAVA, BASH & CHROME DEVTOOLS SANDBOX TOOLS
+        addTool(
+            name = "exec",
+            description = "Voer live Linux / Termux shell commando's of scripts uit op de server (bv. 'uname -a', 'ls -la', 'ps aux', 'uptime', 'df -h', 'node -v', 'python3 --version')",
+            props = mapOf(
+                "command" to "Het shell commando om direct uit te voeren op de server"
+            ),
+            required = listOf("command")
+        )
+
         addTool(
             name = "sandbox_bash_exec",
             description = "Voer willekeurige Linux Bash shell commando's uit in de gehoste container (/workspace, OpenJDK 21, Linux, PTY shell)",
