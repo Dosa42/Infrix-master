@@ -432,7 +432,7 @@ fun AdminAIConsoleTab(
                             }
                         } else {
                             Text(
-                                text = "Actief Model: ${activeModel.ifBlank { "Live Dynamic Endpoint (OpenAI / Codex)" }}",
+                                text = "Actief Model: ${activeModel.ifBlank { "Rechtstreeks opvragen van OpenAI API (Geen fallback)" }}",
                                 fontSize = 11.sp,
                                 color = TextPrimary
                             )

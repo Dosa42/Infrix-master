@@ -278,4 +278,13 @@ class ExampleRobolectricTest {
         val workerConfig = harnessEngine.resolveHarnessConfig(AIHarnessCategory.WERKER, workerUser)
         assertTrue("Werker prompt moet de nieuwe veiligheidsinstructie bevatten", workerConfig.systemPrompt.contains(updatedSop))
     }
+
+    @Test
+    fun `harness returns empty string without dummy fallback model`() {
+        val cleanHarness = AIHarnessEngine()
+        val adminUser = UserEntity(username = "admin", fullName = "Admin", email = "a@a.nl", role = UserRole.ADMIN, passwordHash = "", salt = "")
+        val config = cleanHarness.resolveHarnessConfig(AIHarnessCategory.ADMIN, adminUser)
+        assertEquals("", config.allowedModel)
+        assertFalse("Mag geen dummy fallback bevatten", config.allowedModel.contains("dynamic-live-model"))
+    }
 }

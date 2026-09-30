@@ -106,18 +106,7 @@ class SearchIntegrationService(private val context: Context) {
                 }
             }
         } catch (_: Exception) {
-            // If offline or network error, provide structured fallback search entry
-        }
-
-        if (results.isEmpty()) {
-            results.add(
-                SearchResultItem(
-                    title = "Google Search: $cleanQuery",
-                    snippet = "Klik om de actuele zoekresultaten rechtstreeks in Google te openen voor '$cleanQuery'.",
-                    url = "https://www.google.com/search?q=${Uri.encode(cleanQuery)}",
-                    source = "Google Direct"
-                )
-            )
+            // Live query gefaald: geen fallback resultaten toevoegen
         }
 
         results

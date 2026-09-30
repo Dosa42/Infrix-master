@@ -35,12 +35,11 @@ class GoogleMapsIntegrationService(private val context: Context) {
                 context.startActivity(mapIntent)
                 true
             } else {
-                // Fallback to generic geo / browser Google Maps
                 val webUri = Uri.parse("https://www.google.com/maps/dir/?api=1&destination=$encodedDest")
-                val fallbackIntent = Intent(Intent.ACTION_VIEW, webUri).apply {
+                val webIntent = Intent(Intent.ACTION_VIEW, webUri).apply {
                     flags = Intent.FLAG_ACTIVITY_NEW_TASK
                 }
-                context.startActivity(fallbackIntent)
+                context.startActivity(webIntent)
                 true
             }
         } catch (e: Exception) {

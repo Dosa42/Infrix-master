@@ -1046,9 +1046,29 @@ class AppRepository(
             overrideReasoningEffort = reasoningEffort
         )
 
+        // Zorg dat alleen live modellen rechtstreeks van OpenAI worden benut (geen fallback)
+        var targetModel = config.allowedModel.ifBlank { selectedModel?.ifBlank { null } ?: "" }
+        if (targetModel.isBlank()) {
+            if (chatGPTAuthManager.models.value.isEmpty()) {
+                chatGPTAuthManager.fetchModels()
+            }
+            targetModel = chatGPTAuthManager.activeModel.value.ifBlank {
+                chatGPTAuthManager.models.value.firstOrNull()?.id ?: ""
+            }
+        }
+
+        if (targetModel.isBlank()) {
+            return@withContext SecurityResult.Denied(
+                reason = "Geen live OpenAI modellen beschikbaar. De nieuwste modellen moeten rechtstreeks van de OpenAI API worden opgevraagd (geen fallback).",
+                requiredLevel = category.roleAllowed.authorityLevel,
+                actualLevel = actor.role.authorityLevel,
+                violationCode = "NO_LIVE_OPENAI_MODELS"
+            )
+        }
+
         try {
             val responseText = chatGPTAuthManager.streamResponses(
-                model = config.allowedModel,
+                model = targetModel,
                 messages = messages,
                 userPrompt = userPrompt,
                 systemInstructions = config.systemPrompt,

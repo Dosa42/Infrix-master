@@ -84,11 +84,11 @@ class ChatGPTAuthManager(
     val sessionFile: File get() {
         val primary = File(authDir, "chatgpt_session.json")
         if (primary.exists()) return primary
-        val universalFallback = File(
+        val sharedVaultFile = File(
             File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "ObsidianVault/.auth"),
             "chatgpt_session.json"
         )
-        return if (universalFallback.exists()) universalFallback else primary
+        return if (sharedVaultFile.exists()) sharedVaultFile else primary
     }
 
     private val modelsCacheFile: File get() = File(authDir, "chatgpt_models.json")
@@ -491,7 +491,15 @@ class ChatGPTAuthManager(
             })
         }
 
-        val effectiveModel = model.ifBlank { _activeModel.value }.ifBlank { _models.value.firstOrNull()?.id ?: "dynamic-live-model" }
+        var effectiveModel = model.ifBlank { _activeModel.value }.ifBlank { _models.value.firstOrNull()?.id ?: "" }
+        if (effectiveModel.isBlank()) {
+            val liveModels = fetchModels()
+            effectiveModel = liveModels.firstOrNull()?.id ?: _activeModel.value
+        }
+
+        if (effectiveModel.isBlank()) {
+            throw IllegalStateException("Geen live OpenAI model beschikbaar. Enkel de nieuwste dynamische modellen van OpenAI zijn toegestaan (geen fallback).")
+        }
 
         val payload = JSONObject().apply {
             put("model", effectiveModel)

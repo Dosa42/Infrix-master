@@ -121,7 +121,7 @@ class AIHarnessEngine {
                 """.trimIndent()
 
                 val resolvedModel = overrideModel?.ifBlank { null }
-                    ?: dynamicClientModel.ifBlank { dynamicAdminModel }.ifBlank { "dynamic-live-model" }
+                    ?: dynamicClientModel.ifBlank { dynamicAdminModel }
 
                 HarnessPromptConfiguration(
                     systemPrompt = systemPrompt,
@@ -130,7 +130,7 @@ class AIHarnessEngine {
                     reasoningEffort = null, // Klant gebruikt snelle non-reasoning of default
                     temperature = 0.3,
                     maxTokens = 2048,
-                    bridgeMetadata = "Geregeerd door Admin AI Brug - Dynamisch Model: $resolvedModel"
+                    bridgeMetadata = if (resolvedModel.isNotBlank()) "Geregeerd door Admin AI Brug - Live OpenAI Model: $resolvedModel" else "Geregeerd door Admin AI Brug - Live OpenAI Model"
                 )
             }
 
@@ -180,7 +180,7 @@ class AIHarnessEngine {
                 }
 
                 val resolvedModel = overrideModel?.ifBlank { null }
-                    ?: dynamicWorkerModel.ifBlank { dynamicAdminModel }.ifBlank { "dynamic-live-model" }
+                    ?: dynamicWorkerModel.ifBlank { dynamicAdminModel }
 
                 val resolvedEffort = overrideReasoningEffort ?: dynamicWorkerReasoningEffort
 
@@ -191,7 +191,7 @@ class AIHarnessEngine {
                     reasoningEffort = resolvedEffort,
                     temperature = 0.2,
                     maxTokens = 4096,
-                    bridgeMetadata = "Geregeerd door Admin AI Brug - Dynamisch Model: $resolvedModel (Reasoning: ${resolvedEffort ?: "default"})"
+                    bridgeMetadata = if (resolvedModel.isNotBlank()) "Geregeerd door Admin AI Brug - Live OpenAI Model: $resolvedModel (Reasoning: ${resolvedEffort ?: "default"})" else "Geregeerd door Admin AI Brug - Live OpenAI Model (Reasoning: ${resolvedEffort ?: "default"})"
                 )
             }
 
@@ -217,7 +217,7 @@ class AIHarnessEngine {
                 val adminTools = getFullAdminToolsArray()
 
                 val resolvedModel = overrideModel?.ifBlank { null }
-                    ?: dynamicAdminModel.ifBlank { "dynamic-live-model" }
+                    ?: dynamicAdminModel
 
                 val resolvedEffort = overrideReasoningEffort ?: dynamicAdminReasoningEffort
 
@@ -228,7 +228,7 @@ class AIHarnessEngine {
                     reasoningEffort = resolvedEffort,
                     temperature = 0.2,
                     maxTokens = 8192,
-                    bridgeMetadata = "Admin Master Controller - Dynamisch Model: $resolvedModel (Reasoning: ${resolvedEffort ?: "default"})"
+                    bridgeMetadata = if (resolvedModel.isNotBlank()) "Admin Master Controller - Live OpenAI Model: $resolvedModel (Reasoning: ${resolvedEffort ?: "default"})" else "Admin Master Controller - Live OpenAI Model (Reasoning: ${resolvedEffort ?: "default"})"
                 )
             }
         }

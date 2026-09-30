@@ -86,14 +86,8 @@ class DeviceCapabilitiesManager(private val context: Context) {
             return null
         }
 
-        // Fallback default coordinate (Amsterdam HQ) if device hasn't locked GPS yet
-        return GeoLocationData(
-            latitude = 52.3676,
-            longitude = 4.9041,
-            accuracy = 10f,
-            provider = "Default Anchor",
-            readableAddress = "Amsterdam, Nederland (Standaard Bedrijfsanker)"
-        )
+        // Geen fallback coördinaten: als het apparaat nog geen GPS fix heeft, retourneer null
+        return null
     }
 
     private fun resolveAddress(lat: Double, lng: Double): String? {
