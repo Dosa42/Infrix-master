@@ -85,17 +85,17 @@ class AndroidAIToolDispatcher(
                 "trigger_haptic" -> executeTriggerHaptic(callId, parameters)
                 else -> {
                     val fallbackData = JSONObject().apply {
-                        put("status", "COMPLETED")
+                        put("status", "FAILED")
                         put("tool", toolName)
-                        put("message", "Tool '$toolName' is uitgevoerd door het Android dispatch subsysteem.")
+                        put("error", "Onbekende of niet-geconfigureerde tool '$toolName'")
                     }
                     ToolDispatchResult(
                         toolName = toolName,
                         callId = callId,
-                        success = true,
+                        success = false,
                         outputJson = fallbackData.toString(),
-                        summary = "Tool '$toolName' uitgevoerd.",
-                        uiMarkdown = "✓ Native tool `$toolName` uitgevoerd."
+                        summary = "Tool '$toolName' is niet herkend door de dispatcher.",
+                        uiMarkdown = "⚠️ Tool `$toolName` wordt niet ondersteund door de actieve dispatcher."
                     )
                 }
             }

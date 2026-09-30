@@ -110,20 +110,14 @@ class HostedSandboxClient(private val context: Context) {
         .writeTimeout(60, TimeUnit.SECONDS)
         .build()
 
-    private val _status = MutableStateFlow(SandboxConnectionStatus.ONLINE)
+    private val _status = MutableStateFlow(SandboxConnectionStatus.OFFLINE)
     val status: StateFlow<SandboxConnectionStatus> = _status.asStateFlow()
 
     private val _capabilities = MutableStateFlow(SandboxCapabilities())
     val capabilities: StateFlow<SandboxCapabilities> = _capabilities.asStateFlow()
 
     private val _recentLogs = MutableStateFlow<List<String>>(
-        listOf(
-            "● [WSS CONNECTED] Handshake OK: wss://fernlike-profusely-stunner.ngrok-free.dev",
-            "● [DAEMON] Codex App Server v0.156.1 (Termux on Android 16.0.0)",
-            "● [FRAMEWORK] oh-my-codex (OMX v0.20.2) suite active: autopilot, team, ralph",
-            "● [ACCOUNT] ChatGPT OAuth verified (planType: prolite)",
-            "● [WORKING DIR] /data/data/com.termux/files/home/.codex"
-        )
+        listOf("● [INIT] Sandbox client gereed. Geen actieve externe runner verbonden.")
     )
     val recentLogs: StateFlow<List<String>> = _recentLogs.asStateFlow()
 
@@ -233,14 +227,14 @@ class HostedSandboxClient(private val context: Context) {
         }
 
         val elapsed = SystemClock.elapsedRealtime() - startTime
-        _status.value = SandboxConnectionStatus.ONLINE
-        logSandbox("[BASH DONE] Commando verwerkt via live sandbox client (${elapsed}ms)")
+        _status.value = SandboxConnectionStatus.OFFLINE
+        logSandbox("[BASH FAILED] Geen actieve externe runner verbinding op $currentEndpoint")
 
         SandboxExecutionResult(
             command = cleanCmd,
-            exitCode = 0,
-            stdout = "[infrix-mobile sandbox] Commando '$cleanCmd' ontvangen op $currentEndpoint.\n",
-            stderr = "",
+            exitCode = 127,
+            stdout = "",
+            stderr = "Geen actieve remote runner verbonden op $currentEndpoint. Configureer een bereikbaar runner endpoint om shell commando's live uit te voeren.",
             executionTimeMs = elapsed
         )
     }
@@ -260,7 +254,6 @@ class HostedSandboxClient(private val context: Context) {
         val bashCmd = "javac $cleanName.java && java -Xmx512m $cleanName"
         val execResult = executeBash(bashCmd)
 
-        _status.value = SandboxConnectionStatus.ONLINE
         val elapsed = SystemClock.elapsedRealtime() - startTime
 
         SandboxJavaResult(
@@ -270,8 +263,8 @@ class HostedSandboxClient(private val context: Context) {
             stderr = execResult.stderr,
             exitCode = execResult.exitCode,
             logs = listOf(
-                "[javac] Gecompileerd: $cleanName.java",
-                "[java] Uitgevoerd met exit code ${execResult.exitCode}"
+                "[javac] Broncode opgeslagen in sandbox workspace: $cleanName.java",
+                if (execResult.isSuccess) "[java] Uitgevoerd met exit code 0" else "[java] Executie mislukt: ${execResult.stderr.ifBlank { "Exit code ${execResult.exitCode}" }}"
             ),
             executionTimeMs = elapsed
         )
@@ -331,15 +324,15 @@ class HostedSandboxClient(private val context: Context) {
             }
         }
 
-        _status.value = SandboxConnectionStatus.ONLINE
-        logSandbox("[CDP RESULT] $cleanAction voltooid op $targetUrl")
+        _status.value = SandboxConnectionStatus.OFFLINE
+        logSandbox("[CDP FAILED] Geen actieve browser runner op $currentEndpoint")
         ChromeDevToolsResult(
             action = cleanAction,
             url = targetUrl,
-            success = true,
-            title = "Pagina: $targetUrl",
-            evaluationResult = "CDP actie '$cleanAction' voltooid via $currentEndpoint.",
-            consoleLogs = listOf("[CDP] Verbinding actief met $currentEndpoint")
+            success = false,
+            title = "",
+            evaluationResult = "Geen actieve CDP browser runner verbonden op $currentEndpoint.",
+            consoleLogs = listOf("[CDP ERROR] Runner offline of onbereikbaar")
         )
     }
 
@@ -392,16 +385,14 @@ class HostedSandboxClient(private val context: Context) {
         }
 
         val elapsed = SystemClock.elapsedRealtime() - startTime
-        _status.value = SandboxConnectionStatus.ONLINE
+        _status.value = SandboxConnectionStatus.OFFLINE
         val logs = listOf(
-            "[Playwright] Chromium browser sessie gestart",
-            "[Playwright] Navigatie naar $url",
-            "[Playwright] Script voltooid: ${cleanScript.take(60)}"
+            "[Playwright ERROR] Geen actieve Playwright browser runner op $currentEndpoint"
         )
         PlaywrightResult(
             script = cleanScript,
             targetUrl = url,
-            success = true,
+            success = false,
             logs = logs,
             executionTimeMs = elapsed,
             isLiveRemoteRunner = false
