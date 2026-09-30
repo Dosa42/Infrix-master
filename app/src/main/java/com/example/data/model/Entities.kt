@@ -35,7 +35,10 @@ data class UserEntity(
     val createdAt: Long = System.currentTimeMillis(),
     val approvedBy: String = "Infrix-dev",
     val approvedAt: Long = System.currentTimeMillis()
-)
+) {
+    val hasActiveSession: Boolean
+        get() = sessionToken.isNotBlank() && (lastLoginAt != null) && (System.currentTimeMillis() - (lastLoginAt ?: 0L)) < 86_400_000L
+}
 
 @Entity(tableName = "planning_tasks")
 data class PlanningTaskEntity(

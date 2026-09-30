@@ -62,7 +62,7 @@ class SearchIntegrationService(private val context: Context) {
             // Use DuckDuckGo Instant Answer API for fast, reliable JSON search results without API keys
             val request = Request.Builder()
                 .url("https://api.duckduckgo.com/?q=$encoded&format=json&no_html=1&skip_disambig=1")
-                .header("User-Agent", "AndroidRoleVault/1.0")
+                .header("User-Agent", "infrix-mobile/1.0")
                 .build()
 
             val response = httpClient.newCall(request).execute()

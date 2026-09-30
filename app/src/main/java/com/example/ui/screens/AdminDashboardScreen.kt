@@ -69,8 +69,9 @@ import com.example.ui.theme.TextPrimary
 import com.example.ui.theme.TextSecondary
 import com.example.ui.theme.WerkerPrimary
 import com.example.ui.viewmodel.DashboardViewModel
-import java.text.SimpleDateFormat
-import java.util.Date
+import java.time.Instant
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 import java.util.Locale
 
 @Composable
@@ -563,7 +564,7 @@ private fun AdminLiveMonitoringTab(
     onForceLogout: (UserEntity) -> Unit,
     onUnlock: (UserEntity) -> Unit
 ) {
-    val dateFormat = remember { SimpleDateFormat("dd-MM-yyyy HH:mm", Locale.getDefault()) }
+    val dateFormat = remember { DateTimeFormatter.ofPattern("dd-MM-yyyy HH:mm", Locale.getDefault()) }
 
     Column(
         modifier = Modifier
@@ -596,7 +597,7 @@ private fun AdminLiveMonitoringTab(
             ) {
                 Column(modifier = Modifier.padding(12.dp)) {
                     Text("Actieve Sessies", fontSize = 12.sp, color = TextMuted)
-                    val activeSessions = users.count { it.sessionToken.isNotBlank() }
+                    val activeSessions = users.count { it.hasActiveSession }
                     Text("$activeSessions", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = StatusSuccess)
                 }
             }
@@ -637,8 +638,8 @@ private fun AdminLiveMonitoringTab(
         Spacer(modifier = Modifier.height(6.dp))
 
         users.forEach { u ->
-            val hasActiveSession = u.sessionToken.isNotBlank()
-            val lastLoginStr = u.lastLoginAt?.let { dateFormat.format(Date(it)) } ?: "Nooit"
+            val hasActiveSession = u.hasActiveSession
+            val lastLoginStr = u.lastLoginAt?.let { Instant.ofEpochMilli(it).atZone(ZoneId.systemDefault()).format(dateFormat) } ?: "Nooit"
 
             Card(
                 modifier = Modifier

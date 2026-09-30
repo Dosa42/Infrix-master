@@ -100,7 +100,7 @@ class EmailBackendService(private val context: Context) {
             
             $alertDetail
             
-            Tijdstip: ${java.text.SimpleDateFormat("dd-MM-yyyy HH:mm:ss", java.util.Locale.getDefault()).format(java.util.Date())}
+            Tijdstip: ${java.time.LocalDateTime.now().format(java.time.format.DateTimeFormatter.ofPattern("dd-MM-yyyy HH:mm:ss"))}
             
             Open het beheerderdashboard om de status van het account te controleren.
         """.trimIndent()

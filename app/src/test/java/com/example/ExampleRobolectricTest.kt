@@ -287,4 +287,19 @@ class ExampleRobolectricTest {
         assertEquals("", config.allowedModel)
         assertFalse("Mag geen dummy fallback bevatten", config.allowedModel.contains("dynamic-live-model"))
     }
+
+    @Test
+    fun `date normalization handles all formats to ISO format`() {
+        val norm1 = com.example.data.backend.CalendarBackendService.normalizeDate("05-10-2026")
+        assertEquals("2026-10-05", norm1)
+
+        val norm2 = com.example.data.backend.CalendarBackendService.normalizeDate("2026-10-05")
+        assertEquals("2026-10-05", norm2)
+
+        val norm3 = com.example.data.backend.CalendarBackendService.normalizeDate("05/10/2026")
+        assertEquals("2026-10-05", norm3)
+
+        val norm4 = com.example.data.backend.CalendarBackendService.normalizeDate("2026/10/05")
+        assertEquals("2026-10-05", norm4)
+    }
 }

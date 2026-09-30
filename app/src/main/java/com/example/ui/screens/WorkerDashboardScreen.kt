@@ -76,13 +76,11 @@ fun WorkerDashboardScreen(
 ) {
     val currentUser by viewModel.currentUser.collectAsState()
     val myTasks by viewModel.workerTasks.collectAsState()
-    val allTasks by viewModel.allTasks.collectAsState()
-    val allServiceRequests by viewModel.allServiceRequests.collectAsState()
     val myLogs by viewModel.workerWorkLogs.collectAsState()
     val securityAlert by viewModel.securityAlert.collectAsState()
 
     var selectedTab by remember { mutableIntStateOf(0) }
-    val tabs = listOf("Mijn Planning (${myTasks.size})", "Werker AI Co-Pilot", "Algemene Planning", "Klantverzoeken", "Urenregistratie")
+    val tabs = listOf("Mijn Werkorders (${myTasks.size})", "Werker AI Co-Pilot", "Mijn Urenregistratie (${myLogs.size})")
 
     var selectedTaskForLog by remember { mutableStateOf<PlanningTaskEntity?>(null) }
 
@@ -132,7 +130,7 @@ fun WorkerDashboardScreen(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
-                text = "Autoriteitsniveau: WERKER (Toegang tot operationele planning & uren).",
+                text = "Autoriteitsniveau: WERKER (Toegang tot eigen werkorders & urenverantwoording).",
                 fontSize = 12.sp,
                 fontWeight = FontWeight.Medium,
                 color = TextSecondary
@@ -179,12 +177,7 @@ fun WorkerDashboardScreen(
                 1 -> WorkerAICoPilotTab(
                     viewModel = viewModel
                 )
-                2 -> WorkerAllTasksTab(tasks = allTasks)
-                3 -> WorkerServiceRequestsTab(
-                    requests = allServiceRequests,
-                    onUpdateStatus = { reqId, status -> viewModel.updateRequestStatus(reqId, status) }
-                )
-                4 -> WorkerWorkLogsTab(logs = myLogs)
+                2 -> WorkerWorkLogsTab(logs = myLogs)
             }
         }
     }
@@ -352,165 +345,6 @@ private fun WorkerMyTasksTab(
                                 ) {
                                     Text("+ Uren Boeken", fontSize = 11.sp, color = Color.White, fontWeight = FontWeight.Bold)
                                 }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun WorkerAllTasksTab(
-    tasks: List<PlanningTaskEntity>
-) {
-    Column(modifier = Modifier.fillMaxSize()) {
-        Text(
-            text = "Algemeen Planning Overzicht (${tasks.size})",
-            fontWeight = FontWeight.Bold,
-            fontSize = 16.sp,
-            color = TextPrimary
-        )
-        Spacer(modifier = Modifier.height(8.dp))
-
-        if (tasks.isEmpty()) {
-            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text("Geen planningstaken gevonden.", color = TextMuted)
-            }
-        } else {
-            LazyColumn(
-                modifier = Modifier.fillMaxSize(),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                items(tasks, key = { it.id }) { task ->
-                    Card(
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = CardDefaults.cardColors(containerColor = DarkCardSurface),
-                        border = BorderStroke(1.dp, DarkCardBorder)
-                    ) {
-                        Column(modifier = Modifier.padding(12.dp)) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                Text(
-                                    text = task.title,
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 14.sp,
-                                    color = TextPrimary,
-                                    modifier = Modifier.weight(1f)
-                                )
-                                Text(
-                                    text = task.status,
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 12.sp,
-                                    color = when (task.status) {
-                                        "In uitvoering" -> StatusInfo
-                                        "Afgerond" -> StatusSuccess
-                                        else -> StatusWarning
-                                    }
-                                )
-                            }
-                            Spacer(modifier = Modifier.height(2.dp))
-                            Text(
-                                text = "Toegewezen aan: ${task.assignedWorkerName} | Klant: ${task.clientName}",
-                                fontSize = 12.sp,
-                                color = TextSecondary
-                            )
-                            Text(
-                                text = "Datum: ${task.scheduledDate} | Locatie: ${task.location}",
-                                fontSize = 11.sp,
-                                color = TextMuted
-                            )
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun WorkerServiceRequestsTab(
-    requests: List<ServiceRequestEntity>,
-    onUpdateStatus: (Long, String) -> Unit
-) {
-    Column(modifier = Modifier.fillMaxSize()) {
-        Text(
-            text = "Ingediende Klantaanvragen (${requests.size})",
-            fontWeight = FontWeight.Bold,
-            fontSize = 16.sp,
-            color = TextPrimary
-        )
-        Spacer(modifier = Modifier.height(8.dp))
-
-        if (requests.isEmpty()) {
-            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text("Geen openstaande serviceaanvragen.", color = TextMuted)
-            }
-        } else {
-            LazyColumn(
-                modifier = Modifier.fillMaxSize(),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                items(requests, key = { it.id }) { req ->
-                    Card(
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = CardDefaults.cardColors(containerColor = DarkCardSurface),
-                        border = BorderStroke(1.dp, DarkCardBorder)
-                    ) {
-                        Column(modifier = Modifier.padding(12.dp)) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                Text(
-                                    text = req.title,
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 14.sp,
-                                    color = TextPrimary,
-                                    modifier = Modifier.weight(1f)
-                                )
-                                Text(
-                                    text = req.status,
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 12.sp,
-                                    color = when (req.status) {
-                                        "In Behandeling" -> StatusInfo
-                                        "Voltooid" -> StatusSuccess
-                                        else -> StatusWarning
-                                    }
-                                )
-                            }
-                            Spacer(modifier = Modifier.height(2.dp))
-                            Text(text = req.description, fontSize = 13.sp, color = TextSecondary)
-                            Spacer(modifier = Modifier.height(4.dp))
-                            Text(
-                                text = "Klant: ${req.clientName} | Gewenste datum: ${req.preferredDate} | Urgentie: ${req.urgency}",
-                                fontSize = 11.sp,
-                                color = TextMuted
-                            )
-
-                            Spacer(modifier = Modifier.height(8.dp))
-                            HorizontalDivider(color = DarkCardBorder)
-                            Spacer(modifier = Modifier.height(6.dp))
-
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.End,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                OutlinedButton(
-                                    onClick = { onUpdateStatus(req.id, "In Behandeling") },
-                                    contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp, vertical = 2.dp)
-                                ) { Text("In Behandeling", fontSize = 11.sp, color = TextPrimary) }
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Button(
-                                    onClick = { onUpdateStatus(req.id, "Voltooid") },
-                                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF16A34A)),
-                                    contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp, vertical = 2.dp)
-                                ) { Text("Voltooid", fontSize = 11.sp, color = Color.White) }
                             }
                         }
                     }

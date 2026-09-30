@@ -34,6 +34,7 @@ import com.example.data.security.SecurityResult
 import java.util.UUID
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -67,6 +68,14 @@ class AppRepository(
 
     private val _currentUser = MutableStateFlow<UserEntity?>(null)
     val currentUser: StateFlow<UserEntity?> = _currentUser.asStateFlow()
+
+    init {
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                userDao.clearAllSessionTokens()
+            } catch (_: Exception) {}
+        }
+    }
 
     // Flows
     val allUsers: Flow<List<UserEntity>> = userDao.getAllUsers()
@@ -124,8 +133,6 @@ class AppRepository(
         AppDatabase.ensureAdminAccount(database)
 
         val cleanUsername = usernameInput.trim()
-        val key = cleanUsername.ifBlank { "anonymous" }
-
         val user = userDao.getUserByUsername(cleanUsername)
         if (user == null) {
             val log = SecurityManager.createAuditLog(
@@ -160,26 +167,7 @@ class AppRepository(
             )
         }
 
-        // Verify role selection matches account role
-        if (user.role != selectedRole) {
-            val updatedUser = user.copy(failedAttempts = user.failedAttempts + 1)
-            userDao.updateUser(updatedUser)
-            val log = SecurityManager.createAuditLog(
-                actor = user,
-                actionType = "ROLE_MISMATCH",
-                details = "Gekozen type '${selectedRole.displayName}' komt niet overeen met geregistreerde rol '${user.role.displayName}'.",
-                severity = "WARNING"
-            )
-            auditLogDao.insertLog(log)
-            return@withContext SecurityResult.Denied(
-                reason = "Gekozen type '${selectedRole.displayName}' komt niet overeen met de rol van dit account (${user.role.displayName}).",
-                requiredLevel = selectedRole.authorityLevel,
-                actualLevel = user.role.authorityLevel,
-                violationCode = "ROLE_MISMATCH"
-            )
-        }
-
-        // Verify password hash
+        // 1. Verify password hash first
         val isPasswordCorrect = SecurityManager.verifyPassword(passwordInput, user.salt, user.passwordHash)
         if (!isPasswordCorrect) {
             val newFailed = user.failedAttempts + 1
@@ -204,6 +192,23 @@ class AppRepository(
                 requiredLevel = 1,
                 actualLevel = 0,
                 violationCode = "INVALID_CREDENTIALS"
+            )
+        }
+
+        // 2. Verify role selection matches account role WITHOUT skewing lockout attempts
+        if (user.role != selectedRole) {
+            val log = SecurityManager.createAuditLog(
+                actor = user,
+                actionType = "ROLE_MISMATCH",
+                details = "Gekozen type '${selectedRole.displayName}' komt niet overeen met geregistreerde rol '${user.role.displayName}'.",
+                severity = "WARNING"
+            )
+            auditLogDao.insertLog(log)
+            return@withContext SecurityResult.Denied(
+                reason = "Gekozen type '${selectedRole.displayName}' komt niet overeen met de rol van dit account. Selecteer '${user.role.displayName}' om in te loggen.",
+                requiredLevel = selectedRole.authorityLevel,
+                actualLevel = user.role.authorityLevel,
+                violationCode = "ROLE_MISMATCH"
             )
         }
 
@@ -276,6 +281,31 @@ class AppRepository(
             )
         }
         _currentUser.value = null
+    }
+
+    /**
+     * Validates whether the active session token in memory is still valid in SQLite database.
+     * If the session token was invalidated (e.g. via force logout by Admin) or expired, logs out.
+     */
+    suspend fun validateCurrentSession(): SecurityResult<UserEntity> = withContext(Dispatchers.IO) {
+        val current = _currentUser.value ?: return@withContext SecurityResult.Denied(
+            reason = "Geen actieve sessie.",
+            requiredLevel = 1,
+            actualLevel = 0,
+            violationCode = "UNAUTHENTICATED"
+        )
+        val dbUser = userDao.getUserByUsername(current.username)
+        if (dbUser == null || dbUser.sessionToken.isBlank() || dbUser.sessionToken != current.sessionToken || !dbUser.isActive || dbUser.isLocked || !dbUser.hasActiveSession) {
+            _currentUser.value = null
+            return@withContext SecurityResult.Denied(
+                reason = "Uw sessie is op afstand beëindigd of verlopen door de beheerder.",
+                requiredLevel = 1,
+                actualLevel = 0,
+                violationCode = "SESSION_TERMINATED"
+            )
+        }
+        _currentUser.value = dbUser
+        SecurityResult.Success(dbUser)
     }
 
     // ==========================================
@@ -618,15 +648,22 @@ class AppRepository(
         SecurityResult.Success(Unit)
     }
 
-    // Planning & Taken met Default Kalender Synchronisatie
+    // Planning & Taken met Default Kalender Synchronisatie (Alleen Admin plant)
     suspend fun createPlanningTask(task: PlanningTaskEntity): SecurityResult<Long> = withContext(Dispatchers.IO) {
         val actor = _currentUser.value
-        val guard = SecurityManager.checkPermission(actor, UserRole.WERKER, "Planningstaak aanmaken")
+        val guard = SecurityManager.checkPermission(actor, UserRole.ADMIN, "Planningstaak aanmaken")
         if (guard is SecurityResult.Denied) return@withContext guard
 
+        val normalizedDate = CalendarBackendService.normalizeDate(task.scheduledDate)
+        val cleanTask = task.copy(
+            scheduledDate = normalizedDate,
+            actualHours = 0.0,
+            clientVisibleStatus = "In planning voor $normalizedDate"
+        )
+
         val taskId = database.withTransaction {
-            val id = planningDao.insertTask(task)
-            val createdTask = task.copy(id = id)
+            val id = planningDao.insertTask(cleanTask)
+            val createdTask = cleanTask.copy(id = id)
 
             // Automatische Default Synchronisatie met Backend Kalender
             val calendarEvent = calendarBackendService.syncPlanningTaskToCalendar(createdTask)
@@ -636,7 +673,7 @@ class AppRepository(
                 SecurityManager.createAuditLog(
                     actor,
                     "TASK_CREATED",
-                    "Planningstaak '${task.title}' aangemaakt voor werker '${task.assignedWorkerUsername}' en automatisch synchroon in de kalender geplaatst.",
+                    "Planningstaak '${task.title}' aangemaakt voor werker '${task.assignedWorkerUsername}' en automatisch synchroon in de kalender geplaatst ($normalizedDate).",
                     "INFO"
                 )
             )
@@ -648,14 +685,26 @@ class AppRepository(
     suspend fun updateTaskStatus(
         taskId: Long,
         newStatus: String,
-        actualHours: Double? = null,
         notes: String? = null
     ): SecurityResult<Unit> = withContext(Dispatchers.IO) {
         val actor = _currentUser.value
         val guard = SecurityManager.checkPermission(actor, UserRole.WERKER, "Taakstatus wijzigen")
         if (guard is SecurityResult.Denied) return@withContext guard
 
-        // Check individuele permissie
+        val existing = planningDao.getTaskById(taskId)
+            ?: return@withContext SecurityResult.Denied("Taak #$taskId niet gevonden in het systeem.", 2, actor?.role?.authorityLevel ?: 0, "NOT_FOUND")
+
+        // Werker kan alleen eigen toegewezen taken bewerken
+        if (actor?.role == UserRole.WERKER && !existing.assignedWorkerUsername.equals(actor.username, ignoreCase = true)) {
+            return@withContext SecurityResult.Denied(
+                reason = "U bent niet de toegewezen werker voor werkorder #${existing.id} ('${existing.title}').",
+                requiredLevel = 2,
+                actualLevel = 2,
+                violationCode = "TASK_NOT_ASSIGNED_TO_WORKER"
+            )
+        }
+
+        // Check afrondingspermissie
         if (actor?.role == UserRole.WERKER && newStatus == "Afgerond" && !actor.canCompleteTasks) {
             return@withContext SecurityResult.Denied(
                 reason = "Uw account heeft geen bevoegdheid om taken definitief af te ronden.",
@@ -665,21 +714,35 @@ class AppRepository(
             )
         }
 
-        val existing = planningDao.getTaskById(taskId)
-            ?: return@withContext SecurityResult.Denied("Taak niet gevonden", 2, actor?.role?.authorityLevel ?: 0, "NOT_FOUND")
+        // Strikte state transitions
+        val allowedTransitions = when (existing.status) {
+            "Gepland" -> listOf("In uitvoering", "Gepauzeerd")
+            "In uitvoering" -> listOf("Gepauzeerd", "Afgerond")
+            "Gepauzeerd" -> listOf("In uitvoering", "Afgerond")
+            "Afgerond" -> if (actor?.role == UserRole.ADMIN) listOf("Gepland", "In uitvoering") else emptyList()
+            else -> listOf("Gepland", "In uitvoering", "Gepauzeerd", "Afgerond")
+        }
+
+        if (newStatus != existing.status && !allowedTransitions.contains(newStatus)) {
+            return@withContext SecurityResult.Denied(
+                reason = "Ongeldige statusovergang: Taak status '${existing.status}' kan niet direct naar '$newStatus' worden gezet.",
+                requiredLevel = 2,
+                actualLevel = actor?.role?.authorityLevel ?: 0,
+                violationCode = "INVALID_STATUS_TRANSITION"
+            )
+        }
 
         val clientFriendly = when (newStatus) {
-            "In uitvoering" -> "In uitvoering"
-            "Gepauzeerd" -> "Tijdelijk gepauzeerd"
-            "Afgerond" -> "Succesvol afgerond"
-            else -> "In planning"
+            "In uitvoering" -> "In uitvoering door ${existing.assignedWorkerName.ifBlank { "monteur" }}"
+            "Gepauzeerd" -> "Tijdelijk gepauzeerd (${notes?.take(35) ?: "wacht op onderdelen"})"
+            "Afgerond" -> "Afgerond & Opgeleverd op ${CalendarBackendService.normalizeDate(existing.scheduledDate)}"
+            else -> "In planning voor ${CalendarBackendService.normalizeDate(existing.scheduledDate)}"
         }
 
         database.withTransaction {
             val updated = existing.copy(
                 status = newStatus,
                 clientVisibleStatus = clientFriendly,
-                actualHours = actualHours ?: existing.actualHours,
                 internalNotes = notes ?: existing.internalNotes,
                 updatedAt = System.currentTimeMillis()
             )
@@ -689,7 +752,7 @@ class AppRepository(
             val existingEvent = calendarDao.getEventByTaskId(taskId)
             if (existingEvent != null) {
                 val updatedEvent = existingEvent.copy(
-                    description = "${updated.description}\n\nStatus: ${updated.status}\nGeschatte uren: ${updated.estimatedHours}u",
+                    description = "${updated.description}\n\nStatus: ${updated.status}\nWerkelijke uren: ${updated.actualHours}u / Geschat: ${updated.estimatedHours}u",
                     priority = updated.priority,
                     updatedAt = System.currentTimeMillis()
                 )
@@ -700,7 +763,7 @@ class AppRepository(
                 SecurityManager.createAuditLog(
                     actor,
                     "TASK_STATUS_UPDATED",
-                    "Taak '${updated.title}' gewijzigd naar '$newStatus' en kalender bijgewerkt.",
+                    "Taak #${updated.id} ('${updated.title}') gewijzigd naar '$newStatus' door ${actor?.username}.",
                     "INFO"
                 )
             )
@@ -710,13 +773,22 @@ class AppRepository(
 
     suspend fun logWorkHours(
         taskId: Long,
-        taskTitle: String,
         hours: Double,
         activity: String
     ): SecurityResult<Long> = withContext(Dispatchers.IO) {
         val actor = _currentUser.value
         val guard = SecurityManager.checkPermission(actor, UserRole.WERKER, "Uren registreren")
         if (guard is SecurityResult.Denied) return@withContext guard
+
+        // Valideer uren
+        if (hours <= 0.0 || hours > 24.0 || hours.isNaN()) {
+            return@withContext SecurityResult.Denied(
+                reason = "Aantal gewerkte uren moet een geldig positief getal zijn tussen 0.1 en 24.0 uur.",
+                requiredLevel = 2,
+                actualLevel = 2,
+                violationCode = "INVALID_HOURS"
+            )
+        }
 
         if (actor?.role == UserRole.WERKER && !actor.canLogHours) {
             return@withContext SecurityResult.Denied(
@@ -727,27 +799,38 @@ class AppRepository(
             )
         }
 
+        val task = planningDao.getTaskById(taskId)
+            ?: return@withContext SecurityResult.Denied("Planningstaak #$taskId niet gevonden.", 2, actor?.role?.authorityLevel ?: 0, "TASK_NOT_FOUND")
+
+        // Werker mag alleen uren boeken op eigen taak
+        if (actor?.role == UserRole.WERKER && !task.assignedWorkerUsername.equals(actor.username, ignoreCase = true)) {
+            return@withContext SecurityResult.Denied(
+                reason = "U kunt alleen uren registreren op uw eigen toegewezen werkorders.",
+                requiredLevel = 2,
+                actualLevel = 2,
+                violationCode = "TASK_NOT_ASSIGNED_TO_WORKER"
+            )
+        }
+
         val logId = database.withTransaction {
             val log = WorkLogEntity(
                 taskId = taskId,
-                taskTitle = taskTitle,
+                taskTitle = task.title, // Altijd rechtstreeks uit de DB entity
                 workerUsername = actor?.username ?: "onbekend",
                 workerName = actor?.fullName ?: "Onbekende werker",
                 hoursSpent = hours,
-                activityDescription = activity
+                activityDescription = activity.trim().ifBlank { "Reguliere werkzaamheden" }
             )
             val id = workLogDao.insertWorkLog(log)
 
-            val task = planningDao.getTaskById(taskId)
-            if (task != null) {
-                planningDao.updateTask(task.copy(actualHours = task.actualHours + hours, updatedAt = System.currentTimeMillis()))
-            }
+            val newActualHours = Math.round((task.actualHours + hours) * 100.0) / 100.0
+            planningDao.updateTask(task.copy(actualHours = newActualHours, updatedAt = System.currentTimeMillis()))
 
             auditLogDao.insertLog(
                 SecurityManager.createAuditLog(
                     actor,
                     "HOURS_LOGGED",
-                    "$hours uur geregistreerd voor taak '$taskTitle'.",
+                    "$hours uur geregistreerd voor werkorder #${task.id} ('${task.title}'). Totaal werkelijk: ${newActualHours}u.",
                     "INFO"
                 )
             )
@@ -775,13 +858,15 @@ class AppRepository(
             )
         }
 
+        val normalizedDate = CalendarBackendService.normalizeDate(preferredDate)
+
         val requestId = database.withTransaction {
             val request = ServiceRequestEntity(
                 clientUsername = actor.username,
                 clientName = actor.fullName,
                 title = title.trim(),
                 description = description.trim(),
-                preferredDate = preferredDate.trim(),
+                preferredDate = normalizedDate,
                 urgency = urgency,
                 status = "Nieuw ingediend"
             )
@@ -796,7 +881,7 @@ class AppRepository(
                 SecurityManager.createAuditLog(
                     actor,
                     "REQUEST_SUBMITTED",
-                    "Klant '${actor.username}' heeft serviceaanvraag '$title' ingediend en gesynchroniseerd in de kalender.",
+                    "Klant '${actor.username}' heeft serviceaanvraag '$title' ingediend en gesynchroniseerd in de kalender ($normalizedDate).",
                     "INFO"
                 )
             )
@@ -805,28 +890,42 @@ class AppRepository(
         SecurityResult.Success(requestId)
     }
 
+    // Alleen Admin beoordeelt aanvragen en koppelt kalender bij
     suspend fun updateRequestStatus(
         requestId: Long,
         newStatus: String
     ): SecurityResult<Unit> = withContext(Dispatchers.IO) {
         val actor = _currentUser.value
-        val guard = SecurityManager.checkPermission(actor, UserRole.WERKER, "Aanvraag status beoordelen")
+        val guard = SecurityManager.checkPermission(actor, UserRole.ADMIN, "Aanvraag status beoordelen")
         if (guard is SecurityResult.Denied) return@withContext guard
 
-        serviceRequestDao.updateRequestStatus(requestId, newStatus)
-        auditLogDao.insertLog(
-            SecurityManager.createAuditLog(
-                actor,
-                "REQUEST_STATUS_UPDATED",
-                "Serviceaanvraag #$requestId gewijzigd naar '$newStatus'.",
-                "INFO"
+        database.withTransaction {
+            serviceRequestDao.updateRequestStatus(requestId, newStatus)
+
+            // Kalender event synchroniseren
+            val existingEvent = calendarDao.getEventByRequestId(requestId)
+            if (existingEvent != null) {
+                val updatedEvent = existingEvent.copy(
+                    description = "${existingEvent.description.substringBefore("\n\nStatus:")}\n\nStatus: $newStatus",
+                    updatedAt = System.currentTimeMillis()
+                )
+                calendarDao.updateEvent(updatedEvent)
+            }
+
+            auditLogDao.insertLog(
+                SecurityManager.createAuditLog(
+                    actor,
+                    "REQUEST_STATUS_UPDATED",
+                    "Serviceaanvraag #$requestId gewijzigd naar '$newStatus' en kalender bijgewerkt door beheerder.",
+                    "INFO"
+                )
             )
-        )
+        }
         SecurityResult.Success(Unit)
     }
 
     // ==========================================
-    // BACKEND KALENDER & VOLLEDIGE SYNCHRONISATIE
+    // BACKEND KALENDER & VOLLEDIGE SYNCHRONISATIE (ADMIN ONLY)
     // ==========================================
 
     suspend fun createCalendarEvent(
@@ -844,16 +943,17 @@ class AppRepository(
         calendarColorHex: String = "#38BDF8"
     ): SecurityResult<Long> = withContext(Dispatchers.IO) {
         val actor = _currentUser.value
-        val guard = SecurityManager.checkPermission(actor, UserRole.WERKER, "Kalenderafspraak inplannen")
+        val guard = SecurityManager.checkPermission(actor, UserRole.ADMIN, "Kalenderafspraak inplannen")
         if (guard is SecurityResult.Denied) return@withContext guard
 
+        val normalizedDate = CalendarBackendService.normalizeDate(eventDate)
         val mapsUrl = calendarBackendService.generateDirectionsUrl(location)
         val searchQuery = calendarBackendService.generateGoogleSearchQuery(title, clientName, location)
 
         val event = CalendarEventEntity(
             title = title.trim(),
             description = description.trim(),
-            eventDate = eventDate.trim(),
+            eventDate = normalizedDate,
             startTime = startTime.trim(),
             endTime = endTime.trim(),
             location = location.trim(),
@@ -869,57 +969,66 @@ class AppRepository(
             calendarColorHex = calendarColorHex
         )
 
-        val id = calendarDao.insertEvent(event)
-        auditLogDao.insertLog(
-            SecurityManager.createAuditLog(
-                actor,
-                "CALENDAR_EVENT_CREATED",
-                "Nieuwe kalenderafspraak '$title' aangemaakt voor datum $eventDate met Maps & Search koppeling.",
-                "INFO"
+        val id = database.withTransaction {
+            val eventId = calendarDao.insertEvent(event)
+            auditLogDao.insertLog(
+                SecurityManager.createAuditLog(
+                    actor,
+                    "CALENDAR_EVENT_CREATED",
+                    "Nieuwe kalenderafspraak '$title' aangemaakt voor datum $normalizedDate met Maps & Search koppeling.",
+                    "INFO"
+                )
             )
-        )
+            eventId
+        }
         SecurityResult.Success(id)
     }
 
     suspend fun updateCalendarEvent(event: CalendarEventEntity): SecurityResult<Unit> = withContext(Dispatchers.IO) {
         val actor = _currentUser.value
-        val guard = SecurityManager.checkPermission(actor, UserRole.WERKER, "Kalenderafspraak bewerken")
+        val guard = SecurityManager.checkPermission(actor, UserRole.ADMIN, "Kalenderafspraak bewerken")
         if (guard is SecurityResult.Denied) return@withContext guard
 
+        val normalizedDate = CalendarBackendService.normalizeDate(event.eventDate)
         val mapsUrl = if (event.location.isNotBlank()) calendarBackendService.generateDirectionsUrl(event.location) else event.googleMapsUrl
         val searchQuery = calendarBackendService.generateGoogleSearchQuery(event.title, event.clientName, event.location)
 
-        val updated = event.copy(
-            googleMapsUrl = mapsUrl,
-            googleSearchQuery = searchQuery,
-            updatedAt = System.currentTimeMillis()
-        )
-        calendarDao.updateEvent(updated)
-        auditLogDao.insertLog(
-            SecurityManager.createAuditLog(
-                actor,
-                "CALENDAR_EVENT_UPDATED",
-                "Kalenderafspraak '${event.title}' bijgewerkt.",
-                "INFO"
+        database.withTransaction {
+            val updated = event.copy(
+                eventDate = normalizedDate,
+                googleMapsUrl = mapsUrl,
+                googleSearchQuery = searchQuery,
+                updatedAt = System.currentTimeMillis()
             )
-        )
+            calendarDao.updateEvent(updated)
+            auditLogDao.insertLog(
+                SecurityManager.createAuditLog(
+                    actor,
+                    "CALENDAR_EVENT_UPDATED",
+                    "Kalenderafspraak '${event.title}' bijgewerkt ($normalizedDate).",
+                    "INFO"
+                )
+            )
+        }
         SecurityResult.Success(Unit)
     }
 
     suspend fun deleteCalendarEvent(id: Long): SecurityResult<Unit> = withContext(Dispatchers.IO) {
         val actor = _currentUser.value
-        val guard = SecurityManager.checkPermission(actor, UserRole.WERKER, "Kalenderafspraak verwijderen")
+        val guard = SecurityManager.checkPermission(actor, UserRole.ADMIN, "Kalenderafspraak verwijderen")
         if (guard is SecurityResult.Denied) return@withContext guard
 
-        calendarDao.deleteEventById(id)
-        auditLogDao.insertLog(
-            SecurityManager.createAuditLog(
-                actor,
-                "CALENDAR_EVENT_DELETED",
-                "Kalenderafspraak #$id verwijderd.",
-                "INFO"
+        database.withTransaction {
+            calendarDao.deleteEventById(id)
+            auditLogDao.insertLog(
+                SecurityManager.createAuditLog(
+                    actor,
+                    "CALENDAR_EVENT_DELETED",
+                    "Kalenderafspraak #$id verwijderd door beheerder.",
+                    "INFO"
+                )
             )
-        )
+        }
         SecurityResult.Success(Unit)
     }
 

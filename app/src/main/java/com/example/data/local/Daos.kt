@@ -27,6 +27,9 @@ interface UserDao {
     @Insert(onConflict = OnConflictStrategy.ABORT)
     suspend fun insertUser(user: UserEntity): Long
 
+    @Query("UPDATE users SET sessionToken = ''")
+    suspend fun clearAllSessionTokens(): Int
+
     @Update
     suspend fun updateUser(user: UserEntity)
 

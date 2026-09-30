@@ -72,8 +72,7 @@ import com.example.ui.theme.TextPrimary
 import com.example.ui.theme.TextSecondary
 import com.example.ui.theme.WerkerPrimary
 import com.example.ui.viewmodel.DashboardViewModel
-import java.text.SimpleDateFormat
-import java.util.Date
+import java.time.LocalDate
 import java.util.Locale
 
 @Composable
@@ -765,7 +764,7 @@ fun AddEditCalendarEventDialog(
         colorHex: String
     ) -> Unit
 ) {
-    val today = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
+    val today = LocalDate.now().toString()
 
     var title by remember { mutableStateOf(existingEvent?.title ?: "") }
     var description by remember { mutableStateOf(existingEvent?.description ?: "") }

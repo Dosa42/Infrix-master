@@ -33,23 +33,67 @@ class DashboardViewModel(private val repository: AppRepository) : ViewModel() {
 
     val currentUser: StateFlow<UserEntity?> = repository.currentUser
 
-    val allTasks: StateFlow<List<PlanningTaskEntity>> = repository.allTasks
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    init {
+        viewModelScope.launch {
+            while (true) {
+                kotlinx.coroutines.delay(2500)
+                if (repository.currentUser.value != null) {
+                    val validation = repository.validateCurrentSession()
+                    if (validation is SecurityResult.Denied) {
+                        showDeniedAlert(validation)
+                    }
+                }
+            }
+        }
+    }
 
-    val allUsers: StateFlow<List<UserEntity>> = repository.allUsers
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    val allTasks: StateFlow<List<PlanningTaskEntity>> = currentUser.flatMapLatest { user ->
+        if (user != null && user.role.authorityLevel >= UserRole.ADMIN.authorityLevel) {
+            repository.allTasks
+        } else {
+            flowOf(emptyList())
+        }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    val allWorkLogs: StateFlow<List<WorkLogEntity>> = repository.allWorkLogs
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    val allUsers: StateFlow<List<UserEntity>> = currentUser.flatMapLatest { user ->
+        if (user != null && user.role.authorityLevel >= UserRole.ADMIN.authorityLevel) {
+            repository.allUsers
+        } else {
+            flowOf(emptyList())
+        }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    val allServiceRequests: StateFlow<List<ServiceRequestEntity>> = repository.allServiceRequests
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    val allWorkLogs: StateFlow<List<WorkLogEntity>> = currentUser.flatMapLatest { user ->
+        if (user != null && user.role.authorityLevel >= UserRole.ADMIN.authorityLevel) {
+            repository.allWorkLogs
+        } else {
+            flowOf(emptyList())
+        }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    val auditLogs: StateFlow<List<AuditLogEntity>> = repository.recentAuditLogs
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    val allServiceRequests: StateFlow<List<ServiceRequestEntity>> = currentUser.flatMapLatest { user ->
+        if (user != null && user.role.authorityLevel >= UserRole.ADMIN.authorityLevel) {
+            repository.allServiceRequests
+        } else {
+            flowOf(emptyList())
+        }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    val allCalendarEvents: StateFlow<List<com.example.data.model.CalendarEventEntity>> = repository.allCalendarEvents
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    val auditLogs: StateFlow<List<AuditLogEntity>> = currentUser.flatMapLatest { user ->
+        if (user != null && user.role.authorityLevel >= UserRole.ADMIN.authorityLevel) {
+            repository.recentAuditLogs
+        } else {
+            flowOf(emptyList())
+        }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val allCalendarEvents: StateFlow<List<com.example.data.model.CalendarEventEntity>> = currentUser.flatMapLatest { user ->
+        if (user != null && user.role.authorityLevel >= UserRole.ADMIN.authorityLevel) {
+            repository.allCalendarEvents
+        } else {
+            flowOf(emptyList())
+        }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     val workerCalendarEvents: StateFlow<List<com.example.data.model.CalendarEventEntity>> = currentUser.flatMapLatest { user ->
         if (user != null) {
@@ -321,9 +365,9 @@ class DashboardViewModel(private val repository: AppRepository) : ViewModel() {
         }
     }
 
-    fun logHours(taskId: Long, taskTitle: String, hours: Double, activity: String, onComplete: () -> Unit) {
+    fun logHours(taskId: Long, taskTitle: String? = null, hours: Double, activity: String, onComplete: () -> Unit) {
         viewModelScope.launch {
-            when (val res = repository.logWorkHours(taskId, taskTitle, hours, activity)) {
+            when (val res = repository.logWorkHours(taskId, hours, activity)) {
                 is SecurityResult.Success -> onComplete()
                 is SecurityResult.Denied -> showDeniedAlert(res)
             }

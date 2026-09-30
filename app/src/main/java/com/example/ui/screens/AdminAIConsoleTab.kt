@@ -70,8 +70,9 @@ import com.example.ui.theme.TextSecondary
 import com.example.ui.theme.WerkerPrimary
 import com.example.ui.viewmodel.DashboardViewModel
 import kotlinx.coroutines.launch
-import java.text.SimpleDateFormat
-import java.util.Date
+import java.time.Instant
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 import java.util.Locale
 
 @Composable
@@ -171,7 +172,7 @@ fun AdminAIConsoleTab(
                     session?.let { activeSession ->
                         if (activeSession.isValid) {
                             val expDate = if (activeSession.expiresAt > 0) {
-                                SimpleDateFormat("dd-MM-yyyy HH:mm:ss", Locale.getDefault()).format(Date(activeSession.expiresAt))
+                                Instant.ofEpochMilli(activeSession.expiresAt).atZone(ZoneId.systemDefault()).format(DateTimeFormatter.ofPattern("dd-MM-yyyy HH:mm:ss", Locale.getDefault()))
                             } else {
                                 "Onbeperkt / Geen exp"
                             }

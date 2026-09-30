@@ -776,7 +776,7 @@ class AndroidAIToolDispatcher(
         )
     }
 
-    private fun executeSandboxFsWrite(callId: String, params: JSONObject): ToolDispatchResult {
+    private suspend fun executeSandboxFsWrite(callId: String, params: JSONObject): ToolDispatchResult {
         val path = params.optString("path", "").trim()
         val content = params.optString("content", "")
 
@@ -815,10 +815,10 @@ class AndroidAIToolDispatcher(
         )
     }
 
-    private fun executeSandboxFsRead(callId: String, params: JSONObject): ToolDispatchResult {
+    private suspend fun executeSandboxFsRead(callId: String, params: JSONObject): ToolDispatchResult {
         val path = params.optString("path", "").trim()
         return try {
-            val content = hostedSandboxClient.readFile(path)
+            val content = hostedSandboxClient.readFile(path) ?: ""
             val data = JSONObject().apply {
                 put("path", "/workspace/$path")
                 put("content", content)

@@ -7,15 +7,77 @@ import android.provider.CalendarContract
 import com.example.data.model.CalendarEventEntity
 import com.example.data.model.PlanningTaskEntity
 import com.example.data.model.ServiceRequestEntity
-import java.text.SimpleDateFormat
-import java.util.Date
+import java.time.LocalDate
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
+import java.time.format.DateTimeParseException
 import java.util.Locale
 
 class CalendarBackendService(private val context: Context) {
 
-    private val dateFormatter = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
-    private val timeFormatter = SimpleDateFormat("HH:mm", Locale.getDefault())
-    private val displayDateTimeFormatter = SimpleDateFormat("dd-MM-yyyy HH:mm", Locale.getDefault())
+    companion object {
+        private val ISO_FORMATTER: DateTimeFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd", Locale.US)
+        private val DMY_DASH_FORMATTER: DateTimeFormatter = DateTimeFormatter.ofPattern("dd-MM-yyyy", Locale.US)
+        private val DMY_SLASH_FORMATTER: DateTimeFormatter = DateTimeFormatter.ofPattern("dd/MM/yyyy", Locale.US)
+        private val MDY_SLASH_FORMATTER: DateTimeFormatter = DateTimeFormatter.ofPattern("MM/dd/yyyy", Locale.US)
+        private val YMD_SLASH_FORMATTER: DateTimeFormatter = DateTimeFormatter.ofPattern("yyyy/MM/dd", Locale.US)
+        private val ICS_DATE_FORMATTER: DateTimeFormatter = DateTimeFormatter.ofPattern("yyyyMMdd'T'HHmmss'Z'", Locale.US)
+
+        /**
+         * Normalizes any date string format (yyyy-MM-dd, dd-MM-yyyy, dd/MM/yyyy)
+         * to canonical ISO yyyy-MM-dd format in a 100% thread-safe way.
+         */
+        fun normalizeDate(input: String): String {
+            val clean = input.trim()
+            if (clean.isBlank()) return LocalDate.now().format(ISO_FORMATTER)
+
+            val formatters = listOf(
+                ISO_FORMATTER,
+                DMY_DASH_FORMATTER,
+                DMY_SLASH_FORMATTER,
+                YMD_SLASH_FORMATTER,
+                MDY_SLASH_FORMATTER
+            )
+
+            for (formatter in formatters) {
+                try {
+                    val date = LocalDate.parse(clean, formatter)
+                    return date.format(ISO_FORMATTER)
+                } catch (_: DateTimeParseException) {}
+            }
+
+            // Fallback: try manual extraction if separator exists
+            if (clean.contains("-") || clean.contains("/")) {
+                val sep = if (clean.contains("-")) "-" else "/"
+                val parts = clean.split(sep)
+                if (parts.size == 3) {
+                    try {
+                        val p0 = parts[0].toInt()
+                        val p1 = parts[1].toInt()
+                        val p2 = parts[2].toInt()
+                        val (year, month, day) = if (p0 > 1000) {
+                            Triple(p0, p1, p2)
+                        } else {
+                            Triple(p2, p1, p0)
+                        }
+                        return LocalDate.of(year, month.coerceIn(1, 12), day.coerceIn(1, 31)).format(ISO_FORMATTER)
+                    } catch (_: Exception) {}
+                }
+            }
+
+            return LocalDate.now().format(ISO_FORMATTER)
+        }
+
+        fun parseDateToEpochMillis(dateStr: String): Long {
+            val normalized = normalizeDate(dateStr)
+            return try {
+                val date = LocalDate.parse(normalized, ISO_FORMATTER)
+                date.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
+            } catch (_: Exception) {
+                System.currentTimeMillis()
+            }
+        }
+    }
 
     /**
      * Genereert een Google Maps navigatie/locatie URL
@@ -70,7 +132,7 @@ class CalendarBackendService(private val context: Context) {
         if (event.googleSearchQuery.isNotBlank()) {
             descriptionBuilder.append("\n🔍 Google Search Query: ${event.googleSearchQuery}")
         }
-        descriptionBuilder.append("\n\n(Gesynchroniseerd via Admin Centraal Beheer)")
+        descriptionBuilder.append("\n\n(Gesynchroniseerd via infrix-mobile Centraal Beheer)")
 
         return Intent(Intent.ACTION_INSERT).apply {
             data = CalendarContract.Events.CONTENT_URI
@@ -116,15 +178,17 @@ class CalendarBackendService(private val context: Context) {
 
     /**
      * Synchroniseert een PlanningTaskEntity automatisch naar een volwaardige CalendarEventEntity
+     * met canonieke ISO yyyy-MM-dd datumnormalisatie.
      */
     fun syncPlanningTaskToCalendar(task: PlanningTaskEntity): CalendarEventEntity {
+        val normalizedDate = normalizeDate(task.scheduledDate)
         val startTime = "09:00"
         val durationHours = if (task.estimatedHours > 0) task.estimatedHours else 2.0
         val endHour = (9 + durationHours.toInt()).coerceAtMost(23)
         val endMinutes = ((durationHours - durationHours.toInt()) * 60).toInt()
         val endTime = String.format(Locale.US, "%02d:%02d", endHour, endMinutes)
 
-        val parsedDate = parseDateStringToMillis(task.scheduledDate)
+        val parsedDate = parseDateToEpochMillis(normalizedDate)
         val startMillis = parsedDate + (9 * 3600000L)
         val endMillis = startMillis + (durationHours * 3600000L).toLong()
 
@@ -140,7 +204,7 @@ class CalendarBackendService(private val context: Context) {
         return CalendarEventEntity(
             title = "[Werkorder] ${task.title}",
             description = "${task.description}\n\nStatus: ${task.status}\nGeschatte uren: ${task.estimatedHours} uur\nLocatie: ${task.location}",
-            eventDate = task.scheduledDate,
+            eventDate = normalizedDate,
             startTime = startTime,
             endTime = endTime,
             startTimestampMillis = startMillis,
@@ -164,9 +228,11 @@ class CalendarBackendService(private val context: Context) {
 
     /**
      * Synchroniseert een ServiceRequestEntity automatisch naar een volwaardige CalendarEventEntity
+     * met canonieke ISO yyyy-MM-dd datumnormalisatie.
      */
     fun syncServiceRequestToCalendar(request: ServiceRequestEntity): CalendarEventEntity {
-        val parsedDate = parseDateStringToMillis(request.preferredDate)
+        val normalizedDate = normalizeDate(request.preferredDate)
+        val parsedDate = parseDateToEpochMillis(normalizedDate)
         val startMillis = parsedDate + (13 * 3600000L) // 13:00 uur
         val endMillis = startMillis + (2 * 3600000L)   // 15:00 uur
 
@@ -177,7 +243,7 @@ class CalendarBackendService(private val context: Context) {
         return CalendarEventEntity(
             title = "[Service Aanvraag] ${request.title}",
             description = "Aanvraag door ${request.clientName}:\n${request.description}\n\nUrgentie: ${request.urgency}\nStatus: ${request.status}",
-            eventDate = request.preferredDate,
+            eventDate = normalizedDate,
             startTime = "13:00",
             endTime = "15:00",
             startTimestampMillis = startMillis,
@@ -204,21 +270,20 @@ class CalendarBackendService(private val context: Context) {
      * Dit kan direct worden geïmporteerd in Google Calendar, Outlook, Apple Calendar etc.
      */
     fun exportToIcs(events: List<CalendarEventEntity>): String {
-        val icsDateFormatter = SimpleDateFormat("yyyyMMdd'T'HHmmss'Z'", Locale.US)
         val sb = StringBuilder()
         sb.append("BEGIN:VCALENDAR\r\n")
         sb.append("VERSION:2.0\r\n")
-        sb.append("PRODID:-//RoleVault//Admin Calendar Backend 3.0//NL\r\n")
+        sb.append("PRODID:-//infrix-mobile//Admin Calendar Backend 3.0//NL\r\n")
         sb.append("CALSCALE:GREGORIAN\r\n")
         sb.append("METHOD:PUBLISH\r\n")
-        sb.append("X-WR-CALNAME:RoleVault Admin Centraal\r\n")
+        sb.append("X-WR-CALNAME:infrix-mobile Centraal\r\n")
         sb.append("X-WR-TIMEZONE:Europe/Amsterdam\r\n")
 
         for (event in events) {
-            val dtStamp = icsDateFormatter.format(Date(event.createdAt))
-            val dtStart = icsDateFormatter.format(Date(event.startTimestampMillis))
-            val dtEnd = icsDateFormatter.format(Date(event.endTimestampMillis))
-            val uid = "rolevault-${event.id}-${event.startTimestampMillis}@rolevault.internal"
+            val dtStamp = formatIcsDate(event.createdAt)
+            val dtStart = formatIcsDate(event.startTimestampMillis)
+            val dtEnd = formatIcsDate(event.endTimestampMillis)
+            val uid = "infrix-event-${event.id}-${event.startTimestampMillis}@infrix.mobile"
 
             sb.append("BEGIN:VEVENT\r\n")
             sb.append("UID:$uid\r\n")
@@ -238,29 +303,21 @@ class CalendarBackendService(private val context: Context) {
         return sb.toString()
     }
 
+    private fun formatIcsDate(millis: Long): String {
+        return try {
+            val instant = java.time.Instant.ofEpochMilli(millis)
+            val zdt = instant.atZone(ZoneId.of("UTC"))
+            zdt.format(ICS_DATE_FORMATTER)
+        } catch (_: Exception) {
+            "20261001T000000Z"
+        }
+    }
+
     private fun escapeIcsText(text: String): String {
         return text.replace("\\", "\\\\")
             .replace(";", "\\;")
             .replace(",", "\\,")
             .replace("\n", "\\n")
             .replace("\r", "")
-    }
-
-    private fun parseDateStringToMillis(dateStr: String): Long {
-        return try {
-            if (dateStr.contains("-")) {
-                val parts = dateStr.split("-")
-                if (parts[0].length == 4) {
-                    dateFormatter.parse(dateStr)?.time ?: System.currentTimeMillis()
-                } else {
-                    SimpleDateFormat("dd-MM-yyyy", Locale.getDefault()).parse(dateStr)?.time
-                        ?: System.currentTimeMillis()
-                }
-            } else {
-                System.currentTimeMillis()
-            }
-        } catch (e: Exception) {
-            System.currentTimeMillis()
-        }
     }
 }
