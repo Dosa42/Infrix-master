@@ -25,7 +25,7 @@ enum class AIHarnessCategory(
     ),
     ADMIN(
         title = "Harnas 3: Admin AI Master Orchestrator",
-        description = "Volledige autoriteit, dev tools, skills en centrale brug die automatisch Klant- en Werker AI configureert en beheert.",
+        description = "Volledige autoriteit, dev tools, skills en centrale brug die dynamische modellen, reasoning efforts en Klant/Werker AI configureert.",
         roleAllowed = UserRole.ADMIN
     )
 }
@@ -34,12 +34,20 @@ data class HarnessPromptConfiguration(
     val systemPrompt: String,
     val tools: JSONArray,
     val allowedModel: String,
-    val temperature: Double,
-    val maxTokens: Int,
-    val bridgeMetadata: String
+    val reasoningEffort: String? = null,
+    val temperature: Double = 0.2,
+    val maxTokens: Int = 8192,
+    val bridgeMetadata: String = ""
 )
 
 class AIHarnessEngine {
+
+    // Dynamisch geconfigureerde modellen per harnas (geen hardcoded static modellen)
+    private var dynamicAdminModel: String = ""
+    private var dynamicWorkerModel: String = ""
+    private var dynamicClientModel: String = ""
+    private var dynamicAdminReasoningEffort: String? = "medium"
+    private var dynamicWorkerReasoningEffort: String? = "low"
 
     // Kennisbasis beheerd door Admin AI Brug
     private var customerFaqKnowledge: String = """
@@ -59,16 +67,29 @@ class AIHarnessEngine {
         - Materiaalbeheer: Gebruikte componenten direct noteren in taaknotities
     """.trimIndent()
 
+    fun setDynamicModels(adminModel: String, workerModel: String, clientModel: String) {
+        if (adminModel.isNotBlank()) dynamicAdminModel = adminModel
+        if (workerModel.isNotBlank()) dynamicWorkerModel = workerModel
+        if (clientModel.isNotBlank()) dynamicClientModel = clientModel
+    }
+
+    fun setReasoningEffort(adminReasoning: String?, workerReasoning: String?) {
+        dynamicAdminReasoningEffort = adminReasoning
+        dynamicWorkerReasoningEffort = workerReasoning
+    }
+
     /**
      * Genereert de strikte configuratie voor het opgegeven harnas.
-     * De Admin AI treedt op als de exclusieve brug die de context en parameters filtert.
+     * Modellen worden dynamisch geselecteerd uit de live provider endpoints.
      */
     fun resolveHarnessConfig(
         category: AIHarnessCategory,
         currentUser: UserEntity?,
         activeTasks: List<PlanningTaskEntity> = emptyList(),
         activeRequests: List<ServiceRequestEntity> = emptyList(),
-        allUsers: List<UserEntity> = emptyList()
+        allUsers: List<UserEntity> = emptyList(),
+        overrideModel: String? = null,
+        overrideReasoningEffort: String? = null
     ): HarnessPromptConfiguration {
         return when (category) {
             AIHarnessCategory.KLANT -> {
@@ -99,13 +120,17 @@ class AIHarnessEngine {
                     $requestSummaries
                 """.trimIndent()
 
+                val resolvedModel = overrideModel?.ifBlank { null }
+                    ?: dynamicClientModel.ifBlank { dynamicAdminModel }.ifBlank { "dynamic-live-model" }
+
                 HarnessPromptConfiguration(
                     systemPrompt = systemPrompt,
                     tools = JSONArray(), // Geen tools voor klanten
-                    allowedModel = "gpt-4o-mini",
+                    allowedModel = resolvedModel,
+                    reasoningEffort = null, // Klant gebruikt snelle non-reasoning of default
                     temperature = 0.3,
                     maxTokens = 2048,
-                    bridgeMetadata = "Geregeerd door Admin AI Brug - Sandbox Actief"
+                    bridgeMetadata = "Geregeerd door Admin AI Brug - Dynamisch Model: $resolvedModel"
                 )
             }
 
@@ -143,7 +168,7 @@ class AIHarnessEngine {
                     put(JSONObject().apply {
                         put("type", "function")
                         put("name", "search_technical_specs")
-                        put("description", "Zoek technische specificaties, NEN-normen of installatiehandleidingen op")
+                        put("description", "Zoek technische specificaties, NEN-normen of installatiehandleidingen op via dynamische tools")
                         put("parameters", JSONObject().apply {
                             put("type", "object")
                             put("properties", JSONObject().apply {
@@ -154,13 +179,19 @@ class AIHarnessEngine {
                     })
                 }
 
+                val resolvedModel = overrideModel?.ifBlank { null }
+                    ?: dynamicWorkerModel.ifBlank { dynamicAdminModel }.ifBlank { "dynamic-live-model" }
+
+                val resolvedEffort = overrideReasoningEffort ?: dynamicWorkerReasoningEffort
+
                 HarnessPromptConfiguration(
                     systemPrompt = systemPrompt,
                     tools = workerTools,
-                    allowedModel = "gpt-4o",
+                    allowedModel = resolvedModel,
+                    reasoningEffort = resolvedEffort,
                     temperature = 0.2,
                     maxTokens = 4096,
-                    bridgeMetadata = "Geregeerd door Admin AI Brug - Werker Co-Pilot Actief"
+                    bridgeMetadata = "Geregeerd door Admin AI Brug - Dynamisch Model: $resolvedModel (Reasoning: ${resolvedEffort ?: "default"})"
                 )
             }
 
@@ -173,8 +204,8 @@ class AIHarnessEngine {
                     
                     JE ROL ALS CENTRALE BRUG & ORCHESTRATOR:
                     1. Je hebt de hoogste autoriteit binnen de applicatie en beschikt over alle diagnostische, ontwikkel- en beheerinstrumenten.
-                    2. Jij bent de ENIGE brug die de configuratie, kennis en veiligheidspolicies beheert voor de 'Klant AI' en 'Werker AI'.
-                    3. De menselijke beheerder hoeft niet elke AI afzonderlijk te configureren; jij vertaalt beheerinstructies automatisch naar geüpdatete policies voor de monteurs en klanten.
+                    2. Jij bent de ENIGE brug die de dynamische modellen, reasoning efforts, actieve endpoints en veiligheidspolicies beheert voor de 'Klant AI' en 'Werker AI'.
+                    3. De menselijke beheerder hoeft niet elke AI afzonderlijk te configureren; jij regelt modelselecties, tool calls en richtlijnen direct.
                     4. Je bewaakt de strikte scheiding van data tussen Klant, Werker en Systeem.
                     
                     SYSTEEM OVERZICHT:
@@ -185,21 +216,24 @@ class AIHarnessEngine {
 
                 val adminTools = getFullAdminToolsArray()
 
+                val resolvedModel = overrideModel?.ifBlank { null }
+                    ?: dynamicAdminModel.ifBlank { "dynamic-live-model" }
+
+                val resolvedEffort = overrideReasoningEffort ?: dynamicAdminReasoningEffort
+
                 HarnessPromptConfiguration(
                     systemPrompt = systemPrompt,
                     tools = adminTools,
-                    allowedModel = "gpt-4o",
+                    allowedModel = resolvedModel,
+                    reasoningEffort = resolvedEffort,
                     temperature = 0.2,
                     maxTokens = 8192,
-                    bridgeMetadata = "Admin Master Controller - Volledige Rechten & AI Brug Actief"
+                    bridgeMetadata = "Admin Master Controller - Dynamisch Model: $resolvedModel (Reasoning: ${resolvedEffort ?: "default"})"
                 )
             }
         }
     }
 
-    /**
-     * Admin AI kan de kennis en richtlijnen voor Klant en Werker dynamisch bijwerken.
-     */
     fun updateCustomerKnowledgeByAdminAI(newKnowledge: String) {
         if (newKnowledge.isNotBlank()) {
             customerFaqKnowledge = newKnowledge.trim()
@@ -210,6 +244,10 @@ class AIHarnessEngine {
         if (newSop.isNotBlank()) {
             workerSopGuidelines = newSop.trim()
         }
+    }
+
+    fun updateDynamicModelsByAdminAI(adminModel: String, workerModel: String, clientModel: String) {
+        setDynamicModels(adminModel, workerModel, clientModel)
     }
 
     private fun getFullAdminToolsArray(): JSONArray {
@@ -250,6 +288,18 @@ class AIHarnessEngine {
             description = "Forceer een volledige automatische synchronisatie van taken, werkers, klanten, Maps routes en Search data naar de backend kalender",
             props = emptyMap(),
             required = emptyList()
+        )
+
+        addTool(
+            name = "configure_dynamic_ai_models",
+            description = "Configureer dynamische AI modellen en reasoning efforts voor Klant, Werker en Admin harnassen",
+            props = mapOf(
+                "admin_model" to "Dynamisch model ID voor Admin",
+                "worker_model" to "Dynamisch model ID voor Werker",
+                "client_model" to "Dynamisch model ID voor Klant",
+                "reasoning_effort" to "Reasoning effort (low, medium, high)"
+            ),
+            required = listOf("admin_model")
         )
 
         addTool(

@@ -74,6 +74,16 @@ class AppRepository(
     val allCalendarEvents: Flow<List<CalendarEventEntity>> = calendarDao.getAllEvents()
     val chatGPTSession: StateFlow<ChatGPTSession?> = chatGPTAuthManager.sessionState
     val chatGPTModels: StateFlow<List<ChatGPTModelInfo>> = chatGPTAuthManager.models
+    val activeChatGPTModel: StateFlow<String> = chatGPTAuthManager.activeModel
+    val selectedReasoningEffort: StateFlow<String?> = chatGPTAuthManager.selectedReasoningEffort
+
+    fun setActiveChatGPTModel(modelId: String) {
+        chatGPTAuthManager.setActiveModel(modelId)
+    }
+
+    fun setSelectedReasoningEffort(effort: String?) {
+        chatGPTAuthManager.setSelectedReasoningEffort(effort)
+    }
 
     fun getCalendarEventsForDate(date: String): Flow<List<CalendarEventEntity>> {
         return calendarDao.getEventsForDate(date)
@@ -994,6 +1004,8 @@ class AppRepository(
         category: AIHarnessCategory,
         messages: List<ChatMessage>,
         userPrompt: String,
+        selectedModel: String? = null,
+        reasoningEffort: String? = null,
         onChunk: (String) -> Unit,
         onStatus: (String) -> Unit
     ): SecurityResult<String> = withContext(Dispatchers.IO) {
@@ -1029,7 +1041,9 @@ class AppRepository(
             currentUser = actor,
             activeTasks = tasks,
             activeRequests = requests,
-            allUsers = users
+            allUsers = users,
+            overrideModel = selectedModel,
+            overrideReasoningEffort = reasoningEffort
         )
 
         try {
@@ -1039,6 +1053,7 @@ class AppRepository(
                 userPrompt = userPrompt,
                 systemInstructions = config.systemPrompt,
                 toolsArray = config.tools,
+                reasoningEffort = config.reasoningEffort,
                 onChunk = onChunk,
                 onStatus = onStatus
             )

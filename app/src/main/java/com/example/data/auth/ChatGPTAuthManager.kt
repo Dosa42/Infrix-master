@@ -102,7 +102,23 @@ class ChatGPTAuthManager(
     private val _models = MutableStateFlow<List<ChatGPTModelInfo>>(loadModelsFromDisk())
     val models: StateFlow<List<ChatGPTModelInfo>> = _models.asStateFlow()
 
+    private val _activeModel = MutableStateFlow<String>("")
+    val activeModel: StateFlow<String> = _activeModel.asStateFlow()
+
+    private val _selectedReasoningEffort = MutableStateFlow<String?>("medium")
+    val selectedReasoningEffort: StateFlow<String?> = _selectedReasoningEffort.asStateFlow()
+
     private val activeStreams = ConcurrentHashMap<String, Call>()
+
+    fun setActiveModel(modelId: String) {
+        if (modelId.isNotBlank()) {
+            _activeModel.value = modelId
+        }
+    }
+
+    fun setSelectedReasoningEffort(effort: String?) {
+        _selectedReasoningEffort.value = effort
+    }
 
     init {
         val s = loadSessionFromDisk()
@@ -405,11 +421,17 @@ class ChatGPTAuthManager(
 
             if (list.isNotEmpty()) {
                 _models.value = list
+                if (_activeModel.value.isBlank()) {
+                    _activeModel.value = list.first().id
+                }
                 saveModelsToDisk(list)
             } else {
                 val disk = loadModelsFromDisk()
                 if (disk.isNotEmpty()) {
                     _models.value = disk
+                    if (_activeModel.value.isBlank()) {
+                        _activeModel.value = disk.first().id
+                    }
                     list.addAll(disk)
                 }
             }
@@ -469,8 +491,10 @@ class ChatGPTAuthManager(
             })
         }
 
+        val effectiveModel = model.ifBlank { _activeModel.value }.ifBlank { _models.value.firstOrNull()?.id ?: "dynamic-live-model" }
+
         val payload = JSONObject().apply {
-            put("model", model.ifBlank { "gpt-4o" })
+            put("model", effectiveModel)
             put("instructions", systemInstructions)
             put("input", inputList)
             put("stream", true)

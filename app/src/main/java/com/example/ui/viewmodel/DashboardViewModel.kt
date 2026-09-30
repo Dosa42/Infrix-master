@@ -521,6 +521,16 @@ class DashboardViewModel(private val repository: AppRepository) : ViewModel() {
 
     val chatGPTSession: StateFlow<com.example.data.auth.ChatGPTSession?> = repository.chatGPTSession
     val chatGPTModels: StateFlow<List<com.example.data.auth.ChatGPTModelInfo>> = repository.chatGPTModels
+    val activeChatGPTModel: StateFlow<String> = repository.activeChatGPTModel
+    val selectedReasoningEffort: StateFlow<String?> = repository.selectedReasoningEffort
+
+    fun setActiveModel(modelId: String) {
+        repository.setActiveChatGPTModel(modelId)
+    }
+
+    fun setSelectedReasoningEffort(effort: String?) {
+        repository.setSelectedReasoningEffort(effort)
+    }
 
     // 7. ChatGPT Token Injectie & 3-Tier AI Harness
     fun injectChatGPTToken(rawTokenOrJson: String, onComplete: (Boolean, String) -> Unit) {
@@ -550,6 +560,8 @@ class DashboardViewModel(private val repository: AppRepository) : ViewModel() {
         category: com.example.data.ai.AIHarnessCategory,
         messages: List<com.example.data.auth.ChatMessage>,
         userPrompt: String,
+        overrideModel: String? = null,
+        overrideReasoningEffort: String? = null,
         onChunk: (String) -> Unit,
         onStatus: (String) -> Unit,
         onComplete: (Boolean, String) -> Unit
@@ -559,6 +571,8 @@ class DashboardViewModel(private val repository: AppRepository) : ViewModel() {
                 category = category,
                 messages = messages,
                 userPrompt = userPrompt,
+                selectedModel = overrideModel,
+                reasoningEffort = overrideReasoningEffort,
                 onChunk = onChunk,
                 onStatus = onStatus
             )) {

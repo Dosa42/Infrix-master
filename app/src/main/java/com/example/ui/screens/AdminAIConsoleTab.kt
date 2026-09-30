@@ -84,6 +84,8 @@ fun AdminAIConsoleTab(
 
     val session by viewModel.chatGPTSession.collectAsState()
     val models by viewModel.chatGPTModels.collectAsState()
+    val activeModel by viewModel.activeChatGPTModel.collectAsState()
+    val reasoningEffort by viewModel.selectedReasoningEffort.collectAsState()
 
     var tokenInput by remember { mutableStateOf("") }
     var isSavingToken by remember { mutableStateOf(false) }
@@ -392,6 +394,79 @@ fun AdminAIConsoleTab(
 
                     Spacer(modifier = Modifier.height(12.dp))
 
+                    // Dynamische Model- en Reasoning Selectie
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(DarkCardSurfaceVariant, RoundedCornerShape(10.dp))
+                            .padding(10.dp)
+                    ) {
+                        Text(
+                            text = "🤖 Dynamisch Provider Model (Geen static endpoints)",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = PrimaryBlueGlow
+                        )
+                        Spacer(modifier = Modifier.height(6.dp))
+
+                        if (models.isNotEmpty()) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                models.take(4).forEach { modelInfo ->
+                                    val isSelected = activeModel == modelInfo.id || (activeModel.isBlank() && models.firstOrNull()?.id == modelInfo.id)
+                                    OutlinedButton(
+                                        onClick = { viewModel.setActiveModel(modelInfo.id) },
+                                        colors = ButtonDefaults.outlinedButtonColors(
+                                            containerColor = if (isSelected) PrimaryBlueGlow.copy(alpha = 0.25f) else Color.Transparent,
+                                            contentColor = if (isSelected) Color.White else TextSecondary
+                                        ),
+                                        border = BorderStroke(1.dp, if (isSelected) PrimaryBlueGlow else DarkCardBorder),
+                                        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                                        modifier = Modifier.weight(1f)
+                                    ) {
+                                        Text(text = modelInfo.name, fontSize = 10.sp, fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal)
+                                    }
+                                }
+                            }
+                        } else {
+                            Text(
+                                text = "Actief Model: ${activeModel.ifBlank { "Live Dynamic Endpoint (OpenAI / Codex)" }}",
+                                fontSize = 11.sp,
+                                color = TextPrimary
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(text = "Reasoning Effort:", fontSize = 11.sp, color = TextMuted)
+                            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                listOf("low", "medium", "high", null).forEach { effort ->
+                                    val isSelected = reasoningEffort == effort
+                                    val label = effort ?: "off"
+                                    OutlinedButton(
+                                        onClick = { viewModel.setSelectedReasoningEffort(effort) },
+                                        colors = ButtonDefaults.outlinedButtonColors(
+                                            containerColor = if (isSelected) AdminPrimary.copy(alpha = 0.25f) else Color.Transparent,
+                                            contentColor = if (isSelected) AdminPrimary else TextMuted
+                                        ),
+                                        border = BorderStroke(1.dp, if (isSelected) AdminPrimary else DarkCardBorder),
+                                        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 6.dp, vertical = 2.dp)
+                                    ) {
+                                        Text(text = label, fontSize = 9.sp)
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
                     if (chatMessages.isEmpty()) {
                         Box(
                             modifier = Modifier
@@ -468,6 +543,8 @@ fun AdminAIConsoleTab(
                                     category = AIHarnessCategory.ADMIN,
                                     messages = chatMessages.dropLast(1),
                                     userPrompt = userText,
+                                    overrideModel = activeModel.ifBlank { null },
+                                    overrideReasoningEffort = reasoningEffort,
                                     onChunk = { chunk ->
                                         val idx = chatMessages.indexOfFirst { it.id == assistantMsgId }
                                         if (idx != -1) {
